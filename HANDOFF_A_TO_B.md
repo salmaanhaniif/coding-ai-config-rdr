@@ -106,10 +106,10 @@ Jika B mengganti kode/dependensi, jalankan ulang tes yang relevan. Tidak perlu m
 
 ## Keterbatasan yang diketahui
 
-1. Browser QA visual belum selesai: in-app browser melaporkan host tidak tersedia; alat Windows berhenti karena tidak dapat menentukan URL aktif dengan andal. Periksa tampilan desktop/mobile dan keyboard pada browser normal saat B mengerjakan UX.
+1. QA visual dilakukan pada viewport ponsel dan desktop melalui browser lokal; pohon satu rule dan pohon setelah koreksi menampilkan cabang, trace, dan detail node dengan benar. Fokus keyboard dasar pada kontrol katalog juga diperiksa; seluruh alur keyboard belum diaudit.
 2. Tabel pohon dan daftar trace adalah tampilan dasar. Visualisasi interaktif masih B2.
 3. Katalog DEMO belum mewakili kemampuan/harga/model nyata. Tidak ada benchmark penghematan token.
-4. UI administrasi katalog dan form outcome belum dibuat; backend keduanya sudah tersedia untuk B3.
+4. Pada saat serah terima, UI katalog dan form outcome belum dibuat. Keduanya kini tersedia melalui panel Katalog DEMO dan Riwayat task.
 5. Peran pakar/konsumen adalah tampilan demo lokal, bukan autentikasi. Tidak untuk publikasi multiuser.
 6. Node.js 24.11.1 saat pengujian menampilkan ExperimentalWarning node:sqlite. Ini sesuai pilihan runtime dan dicatat pada README.
 7. Audit dependensi runtime setelah memperbarui @fastify/static ke 10.1.8 menghilangkan temuan high; masih terdapat 3 temuan moderate pada rantai glob/minimatch/@fastify/static. Tidak dilakukan downgrade paksa ke plugin lama yang tidak sesuai stack. Server demo dibatasi loopback; tinjau pembaruan transitif sebelum penggunaan lebih luas.
@@ -129,22 +129,22 @@ Tidak ada bug fungsional yang diketahui dari skenario yang diuji. Ini tidak meng
 - DRAFT kasus berada di form; draft koreksi disimpan backend.
 - Tidak ada edit/hapus node dan tidak ada reset data otomatis.
 
-## Lanjutan untuk Person B — 40 poin
+## Penyelesaian Person B — 40 poin
 
-### B1 — 12 poin
+### B1 — 12 poin · implementasi UI
 
-Sempurnakan tata letak, form bertahap, bantuan istilah, state loading/error, kartu konfigurasi, dan builder koreksi. Pertahankan kontrak API yang telah diuji. App.tsx boleh dipecah menjadi halaman/hooks agar lebih mudah dirawat.
+UI mendapat perbaikan responsif, bantuan akses/task, wizard akses → task dengan navigasi kembali, konteks mulai/macet yang dijelaskan, kartu konfigurasi yang menonjolkan langkah berikutnya, dan penanganan loading/error. Builder koreksi memakai perbandingan atribut serta kandidat kondisi yang disediakan backend.
 
-### B2 — 10 poin
+### B2 — 10 poin · visualisasi
 
-Ganti tabel pohon dengan visualisasi interaktif, sorot trace dan node kesimpulan, tampilkan detail cornerstone, serta buat riwayat visual. Pastikan kanan TRUE dan kiri FALSE tetap konsisten.
+Tabel pohon diganti struktur bercabang interaktif. Detail aturan, trace, cabang kiri FALSE/kanan TRUE, node kesimpulan, dan cornerstone ditampilkan. Riwayat konsultasi tertaut task dan outcome tersimpan melalui API.
 
-### B3 — 10 poin
+### B3 — 10 poin · katalog/outcome
 
-Bangun UI pengelolaan katalog/default melalui GET/PUT /catalog, serta form laporan melalui POST /tasks/:id/outcomes. Verifikasi sumber resmi jika memakai model nyata; jika belum, pertahankan DEMO. Pisahkan token, biaya API, dan kuota subscription.
+UI katalog dapat menambah model/profil/skill DEMO, mengedit entri, mengatur kompatibilitas, status, effort, sumber/tanggal verifikasi, dan default. Entri lama dinonaktifkan agar snapshot historis tetap utuh. Form outcome menyimpan hasil, bukti, waktu, percobaan, token, biaya API/mata uang, serta pemakaian subscription pada field terpisah. Data awal dipertahankan sebagai DEMO; tidak ada klaim produk nyata.
 
-### B4 — 8 poin
+### B4 — 8 poin · integrasi/dokumentasi
 
-Jalankan tes inti sekali pada awal, tambah pemeriksaan integrasi untuk perubahan B, lakukan QA browser nyata, lengkapi demo dan bahan presentasi Markdown, README akhir, serta catatan kontribusi.
+Typecheck dan build berhasil pada sesi ini. Seluruh 47 tes di 4 berkas lulus memakai Node 26. Tes UI mencakup alur RDR, wizard akses→task, pohon/trace, pemilihan node kesimpulan, outcome, dan pengelolaan katalog. QA visual dilakukan pada viewport ponsel dan desktop; fokus keyboard dasar pada kontrol katalog juga diperiksa. Audit semua alur keyboard belum dilakukan. Bahan demo presentasi dan atribusi kontribusi tersedia di docs/PRESENTASI_DEMO.md dan docs/KONTRIBUSI.md.
 
 Pekerjaan di luar scope tidak menjadi syarat selesai. Jangan mempublikasikan aplikasi, menambah langganan, atau mengintegrasikan akun secara otomatis.

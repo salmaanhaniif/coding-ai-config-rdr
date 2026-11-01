@@ -41,6 +41,7 @@ it('UI terhubung ke backend nyata: profil → konsultasi → bootstrap → korek
   await user.click(screen.getByLabelText('DEMO Codex Deep'));
   await user.click(screen.getByRole('button', { name: 'Simpan profil akses' }));
   await screen.findByText('Profil akses tersimpan. Lanjutkan isi task.');
+  expect(screen.getByRole('button', { name: /Ubah akses/ })).toBeTruthy();
   await user.type(screen.getByLabelText('Deskripsi task'), 'Perbaiki validasi login');
   await user.type(screen.getByLabelText('Kriteria selesai'), 'Tes login lulus');
   await user.click(screen.getByRole('button', { name: 'Dapatkan rekomendasi →' }));
@@ -64,17 +65,40 @@ it('UI terhubung ke backend nyata: profil → konsultasi → bootstrap → korek
     'Perlu investigasi karena percobaan gagal berulang.',
   );
   await user.click(screen.getByRole('button', { name: '+ Percobaan gagal gte 3' }));
-  await user.click(screen.getByRole('button', { name: '+ Status task equals Task macet' }));
   await user.selectOptions(
     screen.getByLabelText('Paket konfigurasi pengganti'),
     'demo-codex-deep-profile',
   );
+  await user.clear(screen.getByLabelText('Nilai kondisi'));
+  await user.type(screen.getByLabelText('Nilai kondisi'), '0');
+  await user.click(screen.getByRole('button', { name: 'Periksa koreksi' }));
+  expect((await screen.findByRole('alert')).textContent).toContain(
+    'Kondisi juga benar pada kasus kunci.',
+  );
+  await user.clear(screen.getByLabelText('Nilai kondisi'));
+  await user.type(screen.getByLabelText('Nilai kondisi'), '3');
   await user.click(screen.getByRole('button', { name: 'Periksa koreksi' }));
   await screen.findByText(/Valid\. 1 kasus terlindungi/);
   await user.click(screen.getByRole('button', { name: 'Simpan aturan & setujui' }));
   await screen.findByText('Aturan baru tersimpan dan hasil disetujui.');
   expect(store.rules()).toHaveLength(2);
   expect(store.list<{ status: string }>('consultations').at(-1)?.status).toBe('CORRECTED_APPROVED');
+  await user.click(screen.getByRole('button', { name: 'Pengetahuan RDR' }));
+  expect(await screen.findByRole('tree', { name: 'Pohon aturan RDR' })).toBeTruthy();
+  expect(screen.getAllByText('KANAN · TRUE').length).toBeGreaterThan(0);
+  expect(screen.getByText(/Trace konsultasi yang sedang dibuka/)).toBeTruthy();
+  expect(screen.getByText('Perlu investigasi karena percobaan gagal berulang.')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Riwayat task' }));
+  await user.type(screen.getAllByLabelText('Bukti/catatan')[0], 'Tes terkait lulus');
+  await user.click(screen.getAllByRole('button', { name: 'Simpan laporan' })[0]);
+  await screen.findByText('Laporan hasil tersimpan.');
+  expect(store.list<{ evidence: string }>('outcomes')[0]?.evidence).toBe('Tes terkait lulus');
+  expect(
+    await screen.findByText(
+      (_, element) =>
+        element?.tagName === 'P' && element.textContent?.includes('Tes terkait lulus') === true,
+    ),
+  ).toBeTruthy();
 }, 15000);
 it('UI menerima akses kedua layanan dan membatasi daftar model sesuai layanan', async () => {
   const user = userEvent.setup();
@@ -101,4 +125,48 @@ it('UI menampilkan kesalahan validasi backend dan tetap dapat digunakan', async 
   await user.click(screen.getByRole('button', { name: 'Simpan profil akses' }));
   await screen.findByText('Profil akses tersimpan. Lanjutkan isi task.');
   expect(screen.queryByRole('alert')).toBeNull();
+});
+it('UI katalog menyimpan perubahan model ke backend dengan version check', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByLabelText('Nama profil');
+  await user.selectOptions(screen.getByLabelText('Tampilan peran'), 'expert');
+  await user.click(screen.getByRole('button', { name: 'Katalog DEMO' }));
+  const nameFields = await screen.findAllByLabelText('Nama model');
+  const modelCount = store.catalog().models.length;
+  await user.clear(nameFields[0]);
+  await user.type(nameFields[0], 'Model DEMO Codex Basic revisi');
+  await user.click(screen.getByRole('button', { name: 'Tambah model DEMO' }));
+  await user.click(screen.getByRole('button', { name: 'Tambah profil DEMO' }));
+  await user.click(screen.getByRole('button', { name: 'Tambah skill DEMO' }));
+  await user.click(screen.getByRole('button', { name: 'Simpan katalog' }));
+  await screen.findByText('Katalog tersimpan. Periksa kembali konsultasi yang masih terbuka.');
+  expect(store.catalog().models[0].name).toBe('Model DEMO Codex Basic revisi');
+  expect(store.catalog().models).toHaveLength(modelCount + 1);
+  expect(store.catalog().profiles.some((p) => p.name === 'Profil DEMO baru')).toBe(true);
+  expect(store.catalog().skills.some((s) => s.name === 'Skill DEMO baru')).toBe(true);
+  expect(store.catalog().version).toBe(2);
+});
+it('form konsultasi memandu pengguna dari profil tersimpan ke tahap task', async () => {
+  const response = await server.inject({
+    method: 'POST',
+    url: '/api/accesses',
+    payload: {
+      name: 'Akses tersimpan',
+      services: ['codex'],
+      primaryService: 'codex',
+      packageName: 'DEMO lokal',
+      modelIds: ['demo-codex-basic'],
+      confirmed: true,
+      priority: 'balanced',
+    },
+  });
+  expect(response.statusCode).toBe(201);
+  const user = userEvent.setup();
+  render(<App />);
+  const next = await screen.findByRole('button', { name: 'Lanjut: isi task →' });
+  expect(screen.queryByLabelText('Deskripsi task')).toBeNull();
+  await user.click(next);
+  expect(await screen.findByLabelText('Deskripsi task')).toBeTruthy();
+  expect(screen.getByRole('button', { name: /Ubah akses/ })).toBeTruthy();
 });

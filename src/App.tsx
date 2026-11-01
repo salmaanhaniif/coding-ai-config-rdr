@@ -4,11 +4,14 @@ import {
   type AccessInput,
   type AccessProfile,
   type CaseInput,
+  type Catalog,
   type ConsultationDetail,
   type CorrectionInput,
   type Overview,
   type Predicate,
   type Task,
+  type OutcomeInput,
+  type RuleNode,
 } from '../shared/domain';
 import { api } from './api';
 import {
@@ -21,6 +24,85 @@ import {
 } from './components';
 
 type View = 'consult' | 'result' | 'expert' | 'tree' | 'catalog' | 'history';
+const newCatalogId = (prefix: string) =>
+  prefix +
+  '-' +
+  (globalThis.crypto?.randomUUID?.() ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+function TreeBranch({
+  id,
+  branch,
+  nodes,
+  selected,
+  onSelect,
+  trace,
+  last,
+}: {
+  id: string;
+  branch?: 'false' | 'true';
+  nodes: RuleNode[];
+  selected: string;
+  onSelect: (id: string) => void;
+  trace: { nodeId: string; matched: boolean }[];
+  last?: string;
+}) {
+  const node = nodes.find((n) => n.id === id);
+  if (!node) return null;
+  const hit = trace.find((t) => t.nodeId === id);
+  return (
+    <li className="tree-item">
+      <div className="tree-branch-label">
+        {branch === 'false' ? 'KIRI · FALSE' : branch === 'true' ? 'KANAN · TRUE' : 'ATURAN AWAL'}
+      </div>
+      <button
+        role="treeitem"
+        aria-selected={selected === id}
+        className={`tree-node ${selected === id ? 'selected' : ''} ${hit ? 'on-path' : ''} ${last === id ? 'conclusion-node' : ''}`}
+        onClick={() => onSelect(id)}
+      >
+        <small>
+          {id === 'root' ? 'ROOT' : 'RULE ' + id.slice(0, 6)}
+          {hit ? ` · ${hit.matched ? 'COCOK' : 'TIDAK COCOK'}` : ''}
+        </small>
+        <strong>{conditionLabel(node.condition)}</strong>
+        <span>
+          Kesimpulan:{' '}
+          {node.conclusion.kind === 'default'
+            ? 'Default layanan utama'
+            : node.conclusion.snapshot.profile.name}
+        </span>
+      </button>
+      <div className="tree-children">
+        {node.falseChild && (
+          <ul>
+            <TreeBranch
+              id={node.falseChild}
+              branch="false"
+              nodes={nodes}
+              selected={selected}
+              onSelect={onSelect}
+              trace={trace}
+              last={last}
+            />
+          </ul>
+        )}
+        {node.trueChild && (
+          <ul>
+            <TreeBranch
+              id={node.trueChild}
+              branch="true"
+              nodes={nodes}
+              selected={selected}
+              onSelect={onSelect}
+              trace={trace}
+              last={last}
+            />
+          </ul>
+        )}
+      </div>
+    </li>
+  );
+}
 const initialAttributes: CaseInput['attributes'] = {
   taskStatus: 'start',
   taskType: 'bug',
@@ -44,6 +126,7 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<ConsultationDetail | null>(null);
+  const [consultStep, setConsultStep] = useState<1 | 2>(1);
   const [accessId, setAccessId] = useState('');
   const [access, setAccess] = useState<AccessInput>({
     name: 'Akses saya',
@@ -62,9 +145,25 @@ export default function App() {
   const [profileId, setProfileId] = useState('');
   const [reason, setReason] = useState('');
   const [preview, setPreview] = useState('');
+  const [catalogDraft, setCatalogDraft] = useState<Catalog | null>(null);
+  const [selectedNode, setSelectedNode] = useState('root');
+  const [outcomes, setOutcomes] = useState<
+    Record<string, (OutcomeInput & { id: string; taskId: string; createdAt: string })[]>
+  >({});
+  const [outcomeDraft, setOutcomeDraft] = useState<OutcomeInput>({
+    success: 'unknown',
+    evidence: '',
+    durationMinutes: null,
+    attempts: 0,
+    tokens: null,
+    apiCost: null,
+    currency: null,
+    subscriptionUsage: null,
+  });
   const load = async () => {
     const d = await api<Overview>('/overview');
     setData(d);
+    setCatalogDraft(d.catalog);
     setAccessId((id) => id || d.accesses[0]?.id || '');
     return d;
   };
@@ -107,6 +206,7 @@ export default function App() {
       const saved = await api<AccessProfile>('/accesses', 'POST', access);
       await load();
       setAccessId(saved.id);
+      setConsultStep(2);
       setNotice('Profil akses tersimpan. Lanjutkan isi task.');
     });
   };
@@ -168,6 +268,86 @@ export default function App() {
       };
     });
   const currentModel = data?.catalog.models.find((m) => m.id === a.currentModelId);
+  const saveCatalog = async () => {
+    if (!catalogDraft) return;
+    await act(async () => {
+      await api('/catalog', 'PUT', catalogDraft);
+      await load();
+      setNotice('Katalog tersimpan. Periksa kembali konsultasi yang masih terbuka.');
+    });
+  };
+  const addDemoModel = () => {
+    if (!catalogDraft) return;
+    const modelId = newCatalogId('demo-model');
+    setCatalogDraft({
+      ...catalogDraft,
+      models: [
+        ...catalogDraft.models,
+        {
+          id: modelId,
+          name: 'Model DEMO baru',
+          service: 'codex',
+          efforts: ['default'],
+          active: true,
+          demo: true,
+          source: '',
+          verifiedAt: null,
+        },
+      ],
+    });
+  };
+  const addDemoProfile = () => {
+    if (!catalogDraft) return;
+    const model = catalogDraft.models.find((m) => m.active);
+    if (!model) {
+      setError('Aktifkan atau tambahkan model terlebih dahulu.');
+      return;
+    }
+    setCatalogDraft({
+      ...catalogDraft,
+      profiles: [
+        ...catalogDraft.profiles,
+        {
+          id: newCatalogId('demo-profile'),
+          name: 'Profil DEMO baru',
+          modelId: model.id,
+          effort: model.efforts[0],
+          mode: 'execution',
+          skillIds: [],
+          nextStep: 'Jelaskan tindakan berikutnya.',
+          context: 'Tambahkan konteks yang diperlukan.',
+          reason: 'Jelaskan alasan konfigurasi ini sesuai.',
+          reconsider: 'Evaluasi kembali jika hasil tidak sesuai kriteria.',
+          active: true,
+        },
+      ],
+    });
+  };
+  const addDemoSkill = () => {
+    if (!catalogDraft) return;
+    setCatalogDraft({
+      ...catalogDraft,
+      skills: [
+        ...catalogDraft.skills,
+        {
+          id: newCatalogId('demo-skill'),
+          name: 'Skill DEMO baru',
+          services: ['codex'],
+          active: true,
+          description: 'Deskripsikan bantuan skill ini.',
+          demo: true,
+          source: '',
+          verifiedAt: null,
+        },
+      ],
+    });
+  };
+  const loadTaskOutcomes = async (id: string) => {
+    const response = await api<{
+      outcomes: (OutcomeInput & { id: string; taskId: string; createdAt: string })[];
+    }>('/tasks/' + id);
+    setOutcomes((old) => ({ ...old, [id]: response.outcomes }));
+  };
   const final = detail && ['APPROVED', 'CORRECTED_APPROVED'].includes(detail.consultation.status);
   const tabs: [View, string, string][] = [
     ['consult', 'Konsultasi', '01'],
@@ -204,7 +384,12 @@ export default function App() {
                 aria-label={title}
                 aria-current={view === id ? 'page' : undefined}
                 className={view === id ? 'active' : ''}
-                onClick={() => setView(id)}
+                onClick={() => {
+                  if (id === 'tree' && detail) {
+                    setSelectedNode(detail.consultation.inference.lastMatchedNode);
+                  }
+                  setView(id);
+                }}
               >
                 <span aria-hidden="true">{num}</span>
                 {title}
@@ -213,11 +398,11 @@ export default function App() {
         </nav>
         <div className="sidebar-bottom">
           <p>
-            Konfigurasi tepat.
+            Keputusan berbasis aturan.
             <br />
-            Langkah berikutnya jelas.
+            Ditinjau oleh pakar.
           </p>
-          <small>Fondasi Person A · v0.1</small>
+          <small>DevPilot RDR · Demo lokal</small>
         </div>
       </aside>
       <main>
@@ -297,323 +482,369 @@ export default function App() {
             <>
               {view === 'consult' && (
                 <>
-                  <div className="stats">
-                    <div>
+                  <div className="stats" aria-label="Tahapan konsultasi">
+                    <button
+                      className={consultStep === 1 ? 'current' : 'complete'}
+                      onClick={() => setConsultStep(1)}
+                      type="button"
+                    >
                       <strong>01</strong>
                       <span>Konfirmasi akses</span>
-                    </div>
-                    <div>
+                    </button>
+                    <button
+                      className={consultStep === 2 ? 'current' : ''}
+                      onClick={() => setConsultStep(2)}
+                      type="button"
+                      disabled={!accessId}
+                    >
                       <strong>02</strong>
                       <span>Ceritakan task</span>
-                    </div>
-                    <div>
+                    </button>
+                    <div className="step-static">
                       <strong>03</strong>
                       <span>Penilaian pakar</span>
                     </div>
                   </div>
-                  <section className="panel">
-                    <div className="row between">
-                      <h2>Akses AI yang dimiliki</h2>
-                      <span className="muted">Subscription & model</span>
-                    </div>
-                    <Field label="Gunakan profil tersimpan">
-                      <select value={accessId} onChange={(e) => setAccessId(e.target.value)}>
-                        <option value="">Pilih profil akses</option>
-                        {data.accesses.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} · {p.services.map(valueLabel).join(' + ')}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <details open={!data.accesses.length}>
-                      <summary>Buat profil akses baru</summary>
-                      <form onSubmit={createAccess}>
-                        <fieldset disabled={busy}>
-                          <div className="form-grid">
-                            <Field label="Nama profil">
-                              <input
-                                value={access.name}
-                                required
-                                onChange={(e) => setAccess({ ...access, name: e.target.value })}
-                              />
-                            </Field>
-                            <Field label="Paket / jenis akses">
-                              <input
-                                value={access.packageName}
-                                onChange={(e) =>
-                                  setAccess({ ...access, packageName: e.target.value })
-                                }
-                              />
-                            </Field>
-                          </div>
-                          <div className="checkboxes">
-                            {(['codex', 'claude-code'] as const).map((s) => (
-                              <label key={s}>
+                  {consultStep === 1 && (
+                    <section className="panel">
+                      <div className="row between">
+                        <h2>Akses AI yang dimiliki</h2>
+                        <span className="muted">Subscription & model</span>
+                      </div>
+                      <Field
+                        label="Gunakan profil tersimpan"
+                        hint="Pilih layanan dan model yang memang tersedia pada akses akun Anda."
+                      >
+                        <select value={accessId} onChange={(e) => setAccessId(e.target.value)}>
+                          <option value="">Pilih profil akses</option>
+                          {data.accesses.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} · {p.services.map(valueLabel).join(' + ')}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <details open={!data.accesses.length}>
+                        <summary>Buat profil akses baru</summary>
+                        <form onSubmit={createAccess}>
+                          <fieldset disabled={busy}>
+                            <div className="form-grid">
+                              <Field label="Nama profil">
                                 <input
-                                  type="checkbox"
-                                  checked={access.services.includes(s)}
-                                  onChange={(e) => switchService(s, e.target.checked)}
+                                  value={access.name}
+                                  required
+                                  onChange={(e) => setAccess({ ...access, name: e.target.value })}
                                 />
-                                {valueLabel(s)}
-                              </label>
-                            ))}
-                          </div>
-                          <div className="form-grid">
-                            <Field label="Layanan utama">
-                              <select
-                                value={access.primaryService}
-                                onChange={(e) =>
-                                  setAccess({
-                                    ...access,
-                                    primaryService: e.target.value as AccessInput['primaryService'],
-                                  })
-                                }
-                              >
-                                {access.services.map((s) => (
-                                  <option key={s} value={s}>
-                                    {valueLabel(s)}
-                                  </option>
-                                ))}
-                              </select>
-                            </Field>
-                            <Field label="Prioritas penggunaan">
-                              <select
-                                value={access.priority}
-                                onChange={(e) =>
-                                  setAccess({
-                                    ...access,
-                                    priority: e.target.value as AccessInput['priority'],
-                                  })
-                                }
-                              >
-                                {attributes.priority.options.map((p) => (
-                                  <option key={p} value={p}>
-                                    {valueLabel(p)}
-                                  </option>
-                                ))}
-                              </select>
-                            </Field>
-                          </div>
-                          <p className="field-title">Model yang tersedia pada akses ini</p>
-                          <div className="checkboxes vertical">
-                            {data.catalog.models
-                              .filter((m) => m.active && access.services.includes(m.service))
-                              .map((m) => (
-                                <label key={m.id}>
+                              </Field>
+                              <Field label="Paket / jenis akses">
+                                <input
+                                  value={access.packageName}
+                                  onChange={(e) =>
+                                    setAccess({ ...access, packageName: e.target.value })
+                                  }
+                                />
+                              </Field>
+                            </div>
+                            <div className="checkboxes">
+                              {(['codex', 'claude-code'] as const).map((s) => (
+                                <label key={s}>
                                   <input
                                     type="checkbox"
-                                    checked={access.modelIds.includes(m.id)}
-                                    onChange={(e) =>
-                                      setAccess({
-                                        ...access,
-                                        modelIds: e.target.checked
-                                          ? [...access.modelIds, m.id]
-                                          : access.modelIds.filter((id) => id !== m.id),
-                                      })
-                                    }
+                                    checked={access.services.includes(s)}
+                                    onChange={(e) => switchService(s, e.target.checked)}
                                   />
-                                  {m.name}
+                                  {valueLabel(s)}
                                 </label>
                               ))}
-                          </div>
-                          <label className="check">
-                            <input
-                              type="checkbox"
-                              checked={access.confirmed}
-                              onChange={(e) =>
-                                setAccess({ ...access, confirmed: e.target.checked })
-                              }
-                            />
-                            Saya mengonfirmasi akses ke model yang dipilih.
-                          </label>
-                          <button type="submit">Simpan profil akses</button>
-                        </fieldset>
-                      </form>
-                    </details>
-                  </section>
-                  <form className="panel" onSubmit={submit}>
-                    <fieldset disabled={busy}>
-                      <div className="row between">
-                        <h2>Task yang ingin diselesaikan</h2>
-                        <span className="muted">Mulai atau evaluasi ulang</span>
+                            </div>
+                            <div className="form-grid">
+                              <Field label="Layanan utama">
+                                <select
+                                  value={access.primaryService}
+                                  onChange={(e) =>
+                                    setAccess({
+                                      ...access,
+                                      primaryService: e.target
+                                        .value as AccessInput['primaryService'],
+                                    })
+                                  }
+                                >
+                                  {access.services.map((s) => (
+                                    <option key={s} value={s}>
+                                      {valueLabel(s)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
+                              <Field label="Prioritas penggunaan">
+                                <select
+                                  value={access.priority}
+                                  onChange={(e) =>
+                                    setAccess({
+                                      ...access,
+                                      priority: e.target.value as AccessInput['priority'],
+                                    })
+                                  }
+                                >
+                                  {attributes.priority.options.map((p) => (
+                                    <option key={p} value={p}>
+                                      {valueLabel(p)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
+                            </div>
+                            <p className="field-title">Model yang tersedia pada akses ini</p>
+                            <div className="checkboxes vertical">
+                              {data.catalog.models
+                                .filter((m) => m.active && access.services.includes(m.service))
+                                .map((m) => (
+                                  <label key={m.id}>
+                                    <input
+                                      type="checkbox"
+                                      checked={access.modelIds.includes(m.id)}
+                                      onChange={(e) =>
+                                        setAccess({
+                                          ...access,
+                                          modelIds: e.target.checked
+                                            ? [...access.modelIds, m.id]
+                                            : access.modelIds.filter((id) => id !== m.id),
+                                        })
+                                      }
+                                    />
+                                    {m.name}
+                                  </label>
+                                ))}
+                            </div>
+                            <label className="check">
+                              <input
+                                type="checkbox"
+                                checked={access.confirmed}
+                                onChange={(e) =>
+                                  setAccess({ ...access, confirmed: e.target.checked })
+                                }
+                              />
+                              Saya mengonfirmasi akses ke model yang dipilih.
+                            </label>
+                            <button type="submit">Simpan profil akses</button>
+                          </fieldset>
+                        </form>
+                      </details>
+                      <div className="row between step-actions">
+                        <small className="muted">
+                          Pilih profil tersimpan atau buat profil baru untuk melanjutkan.
+                        </small>
+                        <button
+                          type="button"
+                          onClick={() => setConsultStep(2)}
+                          disabled={!accessId}
+                        >
+                          Lanjut: isi task →
+                        </button>
                       </div>
-                      <div className="form-grid">
-                        <Field label="Status task">
-                          <select
-                            value={a.taskStatus}
-                            onChange={(e) =>
-                              setA({ ...a, taskStatus: e.target.value as typeof a.taskStatus })
-                            }
-                          >
-                            {attributes.taskStatus.options.map((v) => (
-                              <option key={v} value={v}>
-                                {valueLabel(v)}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <Field label="Lanjutkan task sebelumnya (opsional)">
-                          <select value={taskId} onChange={(e) => setTaskId(e.target.value)}>
-                            <option value="">Task baru</option>
-                            {data.tasks.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.description.slice(0, 80)}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                      </div>
-                      <Field label="Deskripsi task">
-                        <textarea
-                          required
-                          rows={3}
-                          placeholder="Contoh: perbaiki validasi form login tanpa mengubah alur autentikasi."
-                          value={description}
-                          onChange={(e) => setDescription(e.target.value)}
-                        />
-                      </Field>
-                      <Field
-                        label="Kriteria selesai"
-                        hint="Tuliskan bukti yang dapat diperiksa, misalnya langkah reproduksi berhasil dan tes terkait lulus."
-                      >
-                        <textarea
-                          required
-                          rows={2}
-                          value={acceptance}
-                          onChange={(e) => setAcceptance(e.target.value)}
-                        />
-                      </Field>
-                      <div className="form-grid">
-                        {(
-                          [
-                            'taskType',
-                            'clarity',
-                            'scope',
-                            'familiarity',
-                            'impact',
-                            'reproduction',
-                            'tests',
-                          ] as const
-                        ).map((k) => (
-                          <Field key={k} label={attributes[k].label}>
-                            <select
-                              value={a[k] ?? ''}
-                              onChange={(e) => setA({ ...a, [k]: e.target.value || null })}
-                            >
-                              {k !== 'taskType' && <option value="">Belum diketahui</option>}
-                              {attributes[k].options.map((v) => (
-                                <option key={v} value={v}>
-                                  {valueLabel(v)}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
-                        ))}
-                        <Field label="Batas waktu (menit, opsional)">
-                          <input
-                            type="number"
-                            min="1"
-                            value={a.timeLimit ?? ''}
-                            onChange={(e) =>
-                              setA({
-                                ...a,
-                                timeLimit: e.target.value === '' ? null : Number(e.target.value),
-                              })
-                            }
-                          />
-                        </Field>
-                        <Field label="Jumlah percobaan gagal">
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={a.failures ?? ''}
-                            onChange={(e) =>
-                              setA({
-                                ...a,
-                                failures: e.target.value === '' ? null : Number(e.target.value),
-                              })
-                            }
-                          />
-                        </Field>
-                      </div>
-                      {a.taskStatus === 'stuck' && (
-                        <div className="subpanel">
-                          <h3>Konfigurasi dan gejala saat ini</h3>
+                    </section>
+                  )}
+                  {consultStep === 2 && (
+                    <div className="row step-back">
+                      <button type="button" className="secondary" onClick={() => setConsultStep(1)}>
+                        ← Ubah akses
+                      </button>
+                    </div>
+                  )}
+                  {consultStep === 2 && (
+                    <form className="panel" onSubmit={submit}>
+                      <fieldset disabled={busy}>
+                        <div className="row between">
+                          <h2>Task yang ingin diselesaikan</h2>
+                          <span className="muted">Mulai atau evaluasi ulang</span>
+                        </div>
+                        <details open>
+                          <summary>Langkah berikutnya · karakteristik task dan konteks</summary>
                           <div className="form-grid">
-                            <Field label="Model yang sudah dicoba">
+                            <Field label="Status task">
                               <select
-                                value={a.currentModelId ?? ''}
+                                value={a.taskStatus}
+                                onChange={(e) =>
+                                  setA({ ...a, taskStatus: e.target.value as typeof a.taskStatus })
+                                }
+                              >
+                                {attributes.taskStatus.options.map((v) => (
+                                  <option key={v} value={v}>
+                                    {valueLabel(v)}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                            <Field label="Lanjutkan task sebelumnya (opsional)">
+                              <select value={taskId} onChange={(e) => setTaskId(e.target.value)}>
+                                <option value="">Task baru</option>
+                                {data.tasks.map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.description.slice(0, 80)}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                          </div>
+                          <p className="muted">
+                            Alur <b>{a.taskStatus === 'start' ? 'Mulai task' : 'Task macet'}</b>:{' '}
+                            {a.taskStatus === 'start'
+                              ? 'jelaskan kebutuhan dan bukti selesai.'
+                              : 'catat konfigurasi yang dicoba serta gejala kegagalan.'}
+                          </p>
+                          <Field label="Deskripsi task">
+                            <textarea
+                              required
+                              rows={3}
+                              placeholder="Contoh: perbaiki validasi form login tanpa mengubah alur autentikasi."
+                              value={description}
+                              onChange={(e) => setDescription(e.target.value)}
+                            />
+                          </Field>
+                          <Field
+                            label="Kriteria selesai"
+                            hint="Tuliskan bukti yang dapat diperiksa, misalnya langkah reproduksi berhasil dan tes terkait lulus."
+                          >
+                            <textarea
+                              required
+                              rows={2}
+                              value={acceptance}
+                              onChange={(e) => setAcceptance(e.target.value)}
+                            />
+                          </Field>
+                          <div className="form-grid">
+                            {(
+                              [
+                                'taskType',
+                                'clarity',
+                                'scope',
+                                'familiarity',
+                                'impact',
+                                'reproduction',
+                                'tests',
+                              ] as const
+                            ).map((k) => (
+                              <Field key={k} label={attributes[k].label}>
+                                <select
+                                  value={a[k] ?? ''}
+                                  onChange={(e) => setA({ ...a, [k]: e.target.value || null })}
+                                >
+                                  {k !== 'taskType' && <option value="">Belum diketahui</option>}
+                                  {attributes[k].options.map((v) => (
+                                    <option key={v} value={v}>
+                                      {valueLabel(v)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
+                            ))}
+                            <Field label="Batas waktu (menit, opsional)">
+                              <input
+                                type="number"
+                                min="1"
+                                value={a.timeLimit ?? ''}
                                 onChange={(e) =>
                                   setA({
                                     ...a,
-                                    currentModelId: e.target.value || null,
-                                    currentEffort: null,
+                                    timeLimit:
+                                      e.target.value === '' ? null : Number(e.target.value),
                                   })
                                 }
-                              >
-                                <option value="">Belum diketahui</option>
-                                {data.catalog.models
-                                  .filter((m) =>
-                                    data.accesses
-                                      .find((p) => p.id === accessId)
-                                      ?.modelIds.includes(m.id),
-                                  )
-                                  .map((m) => (
-                                    <option key={m.id} value={m.id}>
-                                      {m.name}
-                                    </option>
-                                  ))}
-                              </select>
+                              />
                             </Field>
-                            <Field label="Effort saat ini">
-                              <select
-                                value={a.currentEffort ?? ''}
+                            <Field label="Jumlah percobaan gagal">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={a.failures ?? ''}
                                 onChange={(e) =>
-                                  setA({ ...a, currentEffort: e.target.value || null })
+                                  setA({
+                                    ...a,
+                                    failures: e.target.value === '' ? null : Number(e.target.value),
+                                  })
                                 }
-                              >
-                                <option value="">Belum diketahui</option>
-                                {currentModel?.efforts.map((v) => (
-                                  <option key={v} value={v}>
-                                    {v === 'default' ? 'Bawaan' : v}
-                                  </option>
-                                ))}
-                              </select>
+                              />
                             </Field>
                           </div>
-                          <div className="checkboxes vertical">
-                            {attributes.symptoms.options.map((s) => (
-                              <label key={s}>
-                                <input
-                                  type="checkbox"
-                                  checked={a.symptoms.includes(s)}
+                        </details>
+                        {a.taskStatus === 'stuck' && (
+                          <div className="subpanel">
+                            <h3>Konfigurasi dan gejala saat ini</h3>
+                            <div className="form-grid">
+                              <Field label="Model yang sudah dicoba">
+                                <select
+                                  value={a.currentModelId ?? ''}
                                   onChange={(e) =>
                                     setA({
                                       ...a,
-                                      symptoms: e.target.checked
-                                        ? [...a.symptoms, s]
-                                        : a.symptoms.filter((v) => v !== s),
+                                      currentModelId: e.target.value || null,
+                                      currentEffort: null,
                                     })
                                   }
-                                />
-                                {valueLabel(s)}
-                              </label>
-                            ))}
+                                >
+                                  <option value="">Belum diketahui</option>
+                                  {data.catalog.models
+                                    .filter((m) =>
+                                      data.accesses
+                                        .find((p) => p.id === accessId)
+                                        ?.modelIds.includes(m.id),
+                                    )
+                                    .map((m) => (
+                                      <option key={m.id} value={m.id}>
+                                        {m.name}
+                                      </option>
+                                    ))}
+                                </select>
+                              </Field>
+                              <Field label="Effort saat ini">
+                                <select
+                                  value={a.currentEffort ?? ''}
+                                  onChange={(e) =>
+                                    setA({ ...a, currentEffort: e.target.value || null })
+                                  }
+                                >
+                                  <option value="">Belum diketahui</option>
+                                  {currentModel?.efforts.map((v) => (
+                                    <option key={v} value={v}>
+                                      {v === 'default' ? 'Bawaan' : v}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
+                            </div>
+                            <div className="checkboxes vertical">
+                              {attributes.symptoms.options.map((s) => (
+                                <label key={s}>
+                                  <input
+                                    type="checkbox"
+                                    checked={a.symptoms.includes(s)}
+                                    onChange={(e) =>
+                                      setA({
+                                        ...a,
+                                        symptoms: e.target.checked
+                                          ? [...a.symptoms, s]
+                                          : a.symptoms.filter((v) => v !== s),
+                                      })
+                                    }
+                                  />
+                                  {valueLabel(s)}
+                                </label>
+                              ))}
+                            </div>
                           </div>
+                        )}
+                        <div className="row between">
+                          <small className="muted">
+                            Rekomendasi akan ditinjau pakar sebelum final.
+                          </small>
+                          <button type="submit" disabled={!accessId}>
+                            {busy ? 'Memproses…' : 'Dapatkan rekomendasi →'}
+                          </button>
                         </div>
-                      )}
-                      <div className="row between">
-                        <small className="muted">
-                          Rekomendasi akan ditinjau pakar sebelum final.
-                        </small>
-                        <button type="submit" disabled={!accessId}>
-                          {busy ? 'Memproses…' : 'Dapatkan rekomendasi →'}
-                        </button>
-                      </div>
-                    </fieldset>
-                  </form>
+                      </fieldset>
+                    </form>
+                  )}
                 </>
               )}
               {view === 'result' &&
@@ -871,64 +1102,513 @@ export default function App() {
                 <section className="panel">
                   <h2>Struktur pengetahuan · {data.nodes.length} rule</h2>
                   <p className="muted">
-                    Kanan = TRUE / pengecualian. Kiri = FALSE / alternatif. Tampilan dasar untuk
-                    penyerahan Person A.
+                    Jalur konsultasi aktif ditandai garis tebal. Kiri selalu FALSE dan kanan selalu
+                    TRUE.
                   </p>
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Node</th>
-                          <th>Kondisi</th>
-                          <th>Kesimpulan</th>
-                          <th>Kiri FALSE</th>
-                          <th>Kanan TRUE</th>
-                          <th>Kasus kunci</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.nodes.map((n) => (
-                          <tr key={n.id}>
-                            <td>{n.id === 'root' ? 'root' : n.id.slice(0, 8)}</td>
-                            <td>{conditionLabel(n.condition)}</td>
-                            <td>
-                              {n.conclusion.kind === 'default'
+                  <div className="tree-layout">
+                    <div className="tree-canvas" role="tree" aria-label="Pohon aturan RDR">
+                      <ul className="tree-root">
+                        <TreeBranch
+                          id="root"
+                          nodes={data.nodes}
+                          selected={selectedNode}
+                          onSelect={setSelectedNode}
+                          trace={detail?.consultation.inference.trace ?? []}
+                          last={detail?.consultation.inference.lastMatchedNode}
+                        />
+                      </ul>
+                    </div>
+                    <aside className="tree-detail">
+                      <h3>Detail cabang</h3>
+                      {(() => {
+                        const node = data.nodes.find((n) => n.id === selectedNode);
+                        return node ? (
+                          <>
+                            <p>
+                              <b>Kondisi:</b> {conditionLabel(node.condition)}
+                            </p>
+                            <p>
+                              <b>Kesimpulan:</b>{' '}
+                              {node.conclusion.kind === 'default'
                                 ? 'Default layanan utama'
-                                : n.conclusion.snapshot.profile.name}
-                            </td>
-                            <td>{n.falseChild?.slice(0, 8) ?? '—'}</td>
-                            <td>{n.trueChild?.slice(0, 8) ?? '—'}</td>
-                            <td>{n.cornerstoneId?.slice(0, 8) ?? 'Belum bootstrap'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                                : node.conclusion.snapshot.profile.name}
+                            </p>
+                            <p>
+                              <b>Alasan pakar:</b> {node.reason}
+                            </p>
+                          </>
+                        ) : null;
+                      })()}
+                      <p>
+                        <b>Kiri · FALSE:</b> lanjut bila kondisi tidak terpenuhi
+                      </p>
+                      <p>
+                        <b>Kanan · TRUE:</b> pengecualian saat kondisi terpenuhi
+                      </p>
+                      <p className="muted">
+                        Cornerstone:{' '}
+                        {data.nodes.find((n) => n.id === selectedNode)?.cornerstoneId ??
+                          'Belum bootstrap'}
+                      </p>
+                      {detail?.matchedRule.id === selectedNode && detail.cornerstone && (
+                        <details>
+                          <summary>Kasus kunci dan atributnya</summary>
+                          <p>{detail.cornerstone.description}</p>
+                          <Compare
+                            facts={detail.case.facts}
+                            cornerstone={detail.cornerstone.facts}
+                          />
+                        </details>
+                      )}
+                    </aside>
                   </div>
+                  {detail && (
+                    <p className="notice">
+                      Trace konsultasi yang sedang dibuka:{' '}
+                      {detail.consultation.inference.trace
+                        .map(
+                          (t) =>
+                            `${t.nodeId === 'root' ? 'root' : t.nodeId.slice(0, 6)} ${t.matched ? 'TRUE' : 'FALSE'}`,
+                        )
+                        .join(' → ')}
+                      . Node kesimpulan terakhir: {detail.consultation.inference.lastMatchedNode}.
+                    </p>
+                  )}
+                  <details className="tree-example">
+                    <summary>Contoh pohon setelah satu koreksi pakar · ilustrasi</summary>
+                    <p className="muted">
+                      Contoh ini hanya penjelasan, tidak ditambahkan ke basis pengetahuan Anda.
+                    </p>
+                    <div className="example-flow">
+                      <article className="example-node">
+                        <small>ROOT · TRUE</small>
+                        <b>Default layanan utama</b>
+                        <span>Kasus umum</span>
+                      </article>
+                      <div className="example-link">
+                        <span>KANAN · TRUE</span>
+                        <b>→</b>
+                      </div>
+                      <article className="example-node exception">
+                        <small>RULE PENGECUALIAN</small>
+                        <b>Status task = macet DAN percobaan gagal ≥ 3</b>
+                        <span>Rekomendasi: mode investigasi</span>
+                      </article>
+                    </div>
+                    <p className="muted">
+                      Jika kondisi rule pengecualian tidak terpenuhi, inferensi mengikuti cabang
+                      kiri FALSE. Rule tetap ditempelkan oleh pakar pada ujung jalur yang sesuai.
+                    </p>
+                  </details>
                 </section>
               )}
               {view === 'catalog' && (
                 <section className="panel">
-                  <h2>Katalog konfigurasi · v{data.catalog.version}</h2>
-                  <p className="muted">
-                    Katalog awal sintetis. Pengelolaan visual dilanjutkan Person B; operasi backend
-                    sudah tersedia.
-                  </p>
-                  <div className="catalog-grid">
-                    {data.catalog.profiles.map((p) => {
-                      const m = data.catalog.models.find((m) => m.id === p.modelId)!;
-                      return (
-                        <article className="subpanel" key={p.id}>
-                          <span className="badge">{m.demo ? 'DEMO' : 'Terverifikasi pakar'}</span>
-                          <h3>{m.name}</h3>
-                          <p>{p.name}</p>
-                          <p>
-                            Effort: <b>{p.effort === 'default' ? 'Bawaan' : p.effort}</b> · {p.mode}
-                          </p>
-                          <p className="muted">{p.nextStep}</p>
-                        </article>
-                      );
-                    })}
+                  <div className="row between">
+                    <h2>Katalog konfigurasi · v{catalogDraft?.version}</h2>
+                    <button onClick={() => void saveCatalog()} disabled={busy}>
+                      Simpan katalog
+                    </button>
                   </div>
+                  <p className="muted">
+                    Katalog awal ditandai DEMO. Model nyata harus menyertakan URL sumber dan tanggal
+                    verifikasi. Perubahan katalog tidak mengubah snapshot rekomendasi lama.
+                  </p>
+                  {catalogDraft && (
+                    <>
+                      <h3>Default layanan</h3>
+                      <div className="form-grid">
+                        {(['codex', 'claude-code'] as const).map((s) => (
+                          <Field key={s} label={'Default · ' + valueLabel(s)}>
+                            <select
+                              value={catalogDraft.defaults[s] ?? ''}
+                              onChange={(e) =>
+                                setCatalogDraft({
+                                  ...catalogDraft,
+                                  defaults: {
+                                    ...catalogDraft.defaults,
+                                    [s]: e.target.value || null,
+                                  },
+                                })
+                              }
+                            >
+                              <option value="">Tidak ditentukan</option>
+                              {catalogDraft.profiles
+                                .filter(
+                                  (p) =>
+                                    p.active &&
+                                    catalogDraft.models.find((m) => m.id === p.modelId)?.service ===
+                                      s,
+                                )
+                                .map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name}
+                                  </option>
+                                ))}
+                            </select>
+                          </Field>
+                        ))}
+                      </div>
+                      <div className="row between catalog-section-title">
+                        <h3>Model dan effort</h3>
+                        <button type="button" className="secondary" onClick={addDemoModel}>
+                          Tambah model DEMO
+                        </button>
+                      </div>
+                      <div className="catalog-grid">
+                        {catalogDraft.models.map((m, i) => (
+                          <article className="subpanel" key={m.id}>
+                            <span className="badge">
+                              {m.demo ? 'DEMO' : 'Entri nyata · verifikasi pakar'}
+                            </span>
+                            <label className="check">
+                              <input
+                                type="checkbox"
+                                checked={m.demo}
+                                onChange={(e) => {
+                                  const models = [...catalogDraft.models];
+                                  models[i] = { ...m, demo: e.target.checked };
+                                  setCatalogDraft({ ...catalogDraft, models });
+                                }}
+                              />
+                              Data sintetis berlabel DEMO
+                            </label>
+                            <div className="form-grid">
+                              <Field label="Nama model">
+                                <input
+                                  value={m.name}
+                                  onChange={(e) => {
+                                    const models = [...catalogDraft.models];
+                                    models[i] = { ...m, name: e.target.value };
+                                    setCatalogDraft({ ...catalogDraft, models });
+                                  }}
+                                />
+                              </Field>
+                              <Field label="Status">
+                                <select
+                                  value={String(m.active)}
+                                  onChange={(e) => {
+                                    const models = [...catalogDraft.models];
+                                    models[i] = { ...m, active: e.target.value === 'true' };
+                                    setCatalogDraft({ ...catalogDraft, models });
+                                  }}
+                                >
+                                  <option value="true">Aktif</option>
+                                  <option value="false">Nonaktif</option>
+                                </select>
+                              </Field>
+                              <Field label="Layanan">
+                                <select
+                                  value={m.service}
+                                  onChange={(e) => {
+                                    const models = [...catalogDraft.models];
+                                    models[i] = {
+                                      ...m,
+                                      service: e.target.value as typeof m.service,
+                                    };
+                                    setCatalogDraft({ ...catalogDraft, models });
+                                  }}
+                                >
+                                  <option value="codex">Codex</option>
+                                  <option value="claude-code">Claude Code</option>
+                                </select>
+                              </Field>
+                              <Field label="Effort, pisahkan dengan koma">
+                                <input
+                                  value={m.efforts.join(', ')}
+                                  onChange={(e) => {
+                                    const models = [...catalogDraft.models];
+                                    models[i] = {
+                                      ...m,
+                                      efforts: e.target.value
+                                        .split(',')
+                                        .map((x) => x.trim())
+                                        .filter(Boolean),
+                                    };
+                                    setCatalogDraft({ ...catalogDraft, models });
+                                  }}
+                                />
+                              </Field>
+                              <Field label="Sumber resmi">
+                                <input
+                                  value={m.source}
+                                  placeholder="URL dokumentasi resmi"
+                                  onChange={(e) => {
+                                    const models = [...catalogDraft.models];
+                                    models[i] = { ...m, source: e.target.value };
+                                    setCatalogDraft({ ...catalogDraft, models });
+                                  }}
+                                />
+                              </Field>
+                              <Field label="Tanggal verifikasi">
+                                <input
+                                  type="date"
+                                  value={m.verifiedAt?.slice(0, 10) ?? ''}
+                                  onChange={(e) => {
+                                    const models = [...catalogDraft.models];
+                                    models[i] = { ...m, verifiedAt: e.target.value || null };
+                                    setCatalogDraft({ ...catalogDraft, models });
+                                  }}
+                                />
+                              </Field>
+                            </div>
+                            <p>
+                              {valueLabel(m.service)} · ID {m.id}
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                      <div className="row between catalog-section-title">
+                        <h3>Profil konfigurasi</h3>
+                        <button type="button" className="secondary" onClick={addDemoProfile}>
+                          Tambah profil DEMO
+                        </button>
+                      </div>
+                      <div className="catalog-grid">
+                        {catalogDraft.profiles.map((p, i) => (
+                          <article className="subpanel" key={p.id}>
+                            <div className="form-grid">
+                              <Field label="Nama profil">
+                                <input
+                                  value={p.name}
+                                  onChange={(e) => {
+                                    const profiles = [...catalogDraft.profiles];
+                                    profiles[i] = { ...p, name: e.target.value };
+                                    setCatalogDraft({ ...catalogDraft, profiles });
+                                  }}
+                                />
+                              </Field>
+                              <Field label="Model">
+                                <select
+                                  value={p.modelId}
+                                  onChange={(e) => {
+                                    const profiles = [...catalogDraft.profiles];
+                                    profiles[i] = { ...p, modelId: e.target.value };
+                                    setCatalogDraft({ ...catalogDraft, profiles });
+                                  }}
+                                >
+                                  {catalogDraft.models.map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.name} · {valueLabel(m.service)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
+                              <Field label="Effort">
+                                <select
+                                  value={p.effort}
+                                  onChange={(e) => {
+                                    const profiles = [...catalogDraft.profiles];
+                                    profiles[i] = { ...p, effort: e.target.value };
+                                    setCatalogDraft({ ...catalogDraft, profiles });
+                                  }}
+                                >
+                                  {(
+                                    catalogDraft.models.find((m) => m.id === p.modelId)?.efforts ??
+                                    []
+                                  ).map((x) => (
+                                    <option key={x}>{x}</option>
+                                  ))}
+                                </select>
+                              </Field>
+                              <Field label="Mode kerja">
+                                <select
+                                  value={p.mode}
+                                  onChange={(e) => {
+                                    const profiles = [...catalogDraft.profiles];
+                                    profiles[i] = { ...p, mode: e.target.value as typeof p.mode };
+                                    setCatalogDraft({ ...catalogDraft, profiles });
+                                  }}
+                                >
+                                  <option value="execution">Eksekusi terarah</option>
+                                  <option value="investigation">Investigasi</option>
+                                  <option value="planning">Perencanaan</option>
+                                </select>
+                              </Field>
+                              <Field label="Langkah berikutnya">
+                                <textarea
+                                  value={p.nextStep}
+                                  onChange={(e) => {
+                                    const profiles = [...catalogDraft.profiles];
+                                    profiles[i] = { ...p, nextStep: e.target.value };
+                                    setCatalogDraft({ ...catalogDraft, profiles });
+                                  }}
+                                />
+                              </Field>
+                              <Field label="Konteks yang diperlukan">
+                                <textarea
+                                  value={p.context}
+                                  onChange={(e) => {
+                                    const profiles = [...catalogDraft.profiles];
+                                    profiles[i] = { ...p, context: e.target.value };
+                                    setCatalogDraft({ ...catalogDraft, profiles });
+                                  }}
+                                />
+                              </Field>
+                              <Field label="Alasan">
+                                <textarea
+                                  value={p.reason}
+                                  onChange={(e) => {
+                                    const profiles = [...catalogDraft.profiles];
+                                    profiles[i] = { ...p, reason: e.target.value };
+                                    setCatalogDraft({ ...catalogDraft, profiles });
+                                  }}
+                                />
+                              </Field>
+                              <Field label="Evaluasi ulang jika">
+                                <textarea
+                                  value={p.reconsider}
+                                  onChange={(e) => {
+                                    const profiles = [...catalogDraft.profiles];
+                                    profiles[i] = { ...p, reconsider: e.target.value };
+                                    setCatalogDraft({ ...catalogDraft, profiles });
+                                  }}
+                                />
+                              </Field>
+                            </div>
+                            <label className="check">
+                              <input
+                                type="checkbox"
+                                checked={p.active}
+                                onChange={(e) => {
+                                  const profiles = [...catalogDraft.profiles];
+                                  profiles[i] = { ...p, active: e.target.checked };
+                                  setCatalogDraft({ ...catalogDraft, profiles });
+                                }}
+                              />
+                              Aktif
+                            </label>
+                            <p className="muted">Skill yang kompatibel:</p>
+                            <div className="checkboxes vertical">
+                              {catalogDraft.skills.map((s) => (
+                                <label key={s.id}>
+                                  <input
+                                    type="checkbox"
+                                    checked={p.skillIds.includes(s.id)}
+                                    onChange={(e) => {
+                                      const profiles = [...catalogDraft.profiles];
+                                      profiles[i] = {
+                                        ...p,
+                                        skillIds: e.target.checked
+                                          ? [...p.skillIds, s.id]
+                                          : p.skillIds.filter((id) => id !== s.id),
+                                      };
+                                      setCatalogDraft({ ...catalogDraft, profiles });
+                                    }}
+                                  />
+                                  {s.name} · {s.services.map(valueLabel).join(', ')}
+                                  {s.demo ? ' · DEMO' : ''}
+                                </label>
+                              ))}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                      <div className="row between catalog-section-title">
+                        <h3>Skill terkurasi</h3>
+                        <button type="button" className="secondary" onClick={addDemoSkill}>
+                          Tambah skill DEMO
+                        </button>
+                      </div>
+                      <div className="catalog-grid">
+                        {catalogDraft.skills.map((s, i) => (
+                          <article className="subpanel" key={s.id}>
+                            <span className="badge">{s.demo ? 'DEMO' : 'Entri katalog'}</span>
+                            <label className="check">
+                              <input
+                                type="checkbox"
+                                checked={s.demo}
+                                onChange={(e) => {
+                                  const skills = [...catalogDraft.skills];
+                                  skills[i] = { ...s, demo: e.target.checked };
+                                  setCatalogDraft({ ...catalogDraft, skills });
+                                }}
+                              />
+                              Data sintetis berlabel DEMO
+                            </label>
+                            <Field label="Nama skill">
+                              <input
+                                value={s.name}
+                                onChange={(e) => {
+                                  const skills = [...catalogDraft.skills];
+                                  skills[i] = { ...s, name: e.target.value };
+                                  setCatalogDraft({ ...catalogDraft, skills });
+                                }}
+                              />
+                            </Field>
+                            <Field label="Deskripsi">
+                              <textarea
+                                value={s.description}
+                                onChange={(e) => {
+                                  const skills = [...catalogDraft.skills];
+                                  skills[i] = { ...s, description: e.target.value };
+                                  setCatalogDraft({ ...catalogDraft, skills });
+                                }}
+                              />
+                            </Field>
+                            <div className="form-grid">
+                              <Field label="Sumber">
+                                <input
+                                  value={s.source}
+                                  placeholder="URL sumber resmi"
+                                  onChange={(e) => {
+                                    const skills = [...catalogDraft.skills];
+                                    skills[i] = { ...s, source: e.target.value };
+                                    setCatalogDraft({ ...catalogDraft, skills });
+                                  }}
+                                />
+                              </Field>
+                              <Field label="Tanggal verifikasi">
+                                <input
+                                  type="date"
+                                  value={s.verifiedAt?.slice(0, 10) ?? ''}
+                                  onChange={(e) => {
+                                    const skills = [...catalogDraft.skills];
+                                    skills[i] = { ...s, verifiedAt: e.target.value || null };
+                                    setCatalogDraft({ ...catalogDraft, skills });
+                                  }}
+                                />
+                              </Field>
+                            </div>
+                            <div className="field">
+                              <span className="field-title">Kompatibel dengan layanan</span>
+                              <div className="checkboxes">
+                                {(['codex', 'claude-code'] as const).map((service) => (
+                                  <label key={service}>
+                                    <input
+                                      type="checkbox"
+                                      checked={s.services.includes(service)}
+                                      onChange={(e) => {
+                                        const skills = [...catalogDraft.skills];
+                                        const services = e.target.checked
+                                          ? [...s.services, service]
+                                          : s.services.filter((x) => x !== service);
+                                        skills[i] = { ...s, services };
+                                        setCatalogDraft({ ...catalogDraft, skills });
+                                      }}
+                                    />
+                                    {valueLabel(service)}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                            <label className="check">
+                              <input
+                                type="checkbox"
+                                checked={s.active}
+                                onChange={(e) => {
+                                  const skills = [...catalogDraft.skills];
+                                  skills[i] = { ...s, active: e.target.checked };
+                                  setCatalogDraft({ ...catalogDraft, skills });
+                                }}
+                              />
+                              Aktif
+                            </label>
+                          </article>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </section>
               )}
               {view === 'history' && (
@@ -957,6 +1637,141 @@ export default function App() {
                               <small>{c.status.replaceAll('_', ' ')}</small>
                             </button>
                           ))}
+                        <section className="subpanel outcome-box">
+                          <h3>Laporan hasil task</h3>
+                          <div className="form-grid">
+                            <Field label="Hasil">
+                              <select
+                                value={outcomeDraft.success}
+                                onChange={(e) =>
+                                  setOutcomeDraft({
+                                    ...outcomeDraft,
+                                    success: e.target.value as OutcomeInput['success'],
+                                  })
+                                }
+                              >
+                                <option value="unknown">Belum diketahui</option>
+                                <option value="yes">Berhasil</option>
+                                <option value="no">Tidak berhasil</option>
+                              </select>
+                            </Field>
+                            <Field label="Waktu (menit)">
+                              <input
+                                type="number"
+                                min="0"
+                                value={outcomeDraft.durationMinutes ?? ''}
+                                onChange={(e) =>
+                                  setOutcomeDraft({
+                                    ...outcomeDraft,
+                                    durationMinutes:
+                                      e.target.value === '' ? null : Number(e.target.value),
+                                  })
+                                }
+                              />
+                            </Field>
+                            <Field label="Jumlah percobaan">
+                              <input
+                                type="number"
+                                min="0"
+                                value={outcomeDraft.attempts ?? ''}
+                                onChange={(e) =>
+                                  setOutcomeDraft({
+                                    ...outcomeDraft,
+                                    attempts: e.target.value === '' ? null : Number(e.target.value),
+                                  })
+                                }
+                              />
+                            </Field>
+                            <Field label="Bukti/catatan">
+                              <textarea
+                                value={outcomeDraft.evidence}
+                                onChange={(e) =>
+                                  setOutcomeDraft({ ...outcomeDraft, evidence: e.target.value })
+                                }
+                              />
+                            </Field>
+                            <Field label="Token (opsional)">
+                              <input
+                                type="number"
+                                min="0"
+                                value={outcomeDraft.tokens ?? ''}
+                                onChange={(e) =>
+                                  setOutcomeDraft({
+                                    ...outcomeDraft,
+                                    tokens: e.target.value === '' ? null : Number(e.target.value),
+                                  })
+                                }
+                              />
+                            </Field>
+                            <Field label="Biaya API (opsional)">
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={outcomeDraft.apiCost ?? ''}
+                                onChange={(e) =>
+                                  setOutcomeDraft({
+                                    ...outcomeDraft,
+                                    apiCost: e.target.value === '' ? null : Number(e.target.value),
+                                  })
+                                }
+                              />
+                            </Field>
+                            <Field label="Mata uang biaya">
+                              <select
+                                value={outcomeDraft.currency ?? ''}
+                                onChange={(e) =>
+                                  setOutcomeDraft({
+                                    ...outcomeDraft,
+                                    currency: (e.target.value || null) as OutcomeInput['currency'],
+                                  })
+                                }
+                              >
+                                <option value="">Tidak diketahui</option>
+                                <option>IDR</option>
+                                <option>USD</option>
+                              </select>
+                            </Field>
+                            <Field label="Pemakaian subscription">
+                              <input
+                                value={outcomeDraft.subscriptionUsage ?? ''}
+                                onChange={(e) =>
+                                  setOutcomeDraft({
+                                    ...outcomeDraft,
+                                    subscriptionUsage: e.target.value || null,
+                                  })
+                                }
+                              />
+                            </Field>
+                          </div>
+                          <div className="row wrap">
+                            <button
+                              onClick={() =>
+                                void act(async () => {
+                                  await api('/tasks/' + t.id + '/outcomes', 'POST', outcomeDraft);
+                                  await loadTaskOutcomes(t.id);
+                                  setNotice('Laporan hasil tersimpan.');
+                                })
+                              }
+                            >
+                              Simpan laporan
+                            </button>
+                            <button
+                              className="secondary"
+                              onClick={() => void act(() => loadTaskOutcomes(t.id))}
+                            >
+                              Muat laporan tersimpan
+                            </button>
+                          </div>
+                          {(outcomes[t.id] ?? []).map((o, i) => (
+                            <p key={i} className="muted">
+                              Hasil: {o.success} · percobaan {o.attempts ?? 'unknown'} · token{' '}
+                              {o.tokens ?? 'unknown'} · biaya API{' '}
+                              {o.apiCost == null ? 'unknown' : `${o.apiCost} ${o.currency}`} ·
+                              subscription: {o.subscriptionUsage ?? 'unknown'} · {o.evidence}
+                            </p>
+                          ))}
+                        </section>
                         <button
                           className="secondary"
                           onClick={() => {

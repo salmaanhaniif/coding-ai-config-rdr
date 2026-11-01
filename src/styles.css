@@ -311,6 +311,43 @@ p {
   padding: 18px;
   background: #fafbf8;
 }
+.stats > button,
+.stats > .step-static {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #dfe6db;
+  border-radius: 9px;
+  padding: 18px;
+  background: #fafbf8;
+  color: #5c7465;
+  text-align: left;
+  font-weight: 500;
+}
+.stats > button:hover {
+  background: #f0f5ec;
+  border-color: #b7c8ad;
+}
+.stats > button.current {
+  background: #edf3e6;
+  border-color: #8faa7e;
+  box-shadow: inset 0 0 0 1px #8faa7e;
+}
+.stats > button.complete strong {
+  color: #2e7954;
+}
+.step-actions {
+  margin-top: 22px;
+}
+.step-back {
+  margin: 0 0 12px;
+}
+.catalog-section-title {
+  margin: 26px 0 14px;
+}
+.catalog-section-title h3 {
+  margin: 0;
+}
 .stats strong {
   font-size: 23px;
   font-weight: 400;
@@ -504,6 +541,175 @@ details[open] > summary {
   background: #edf3e6;
   border-color: #9eb48c;
 }
+.tree-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.85fr);
+  gap: 18px;
+  align-items: start;
+  margin: 22px 0;
+}
+.tree-canvas {
+  min-width: 0;
+  overflow: auto;
+  padding: 12px 8px 20px;
+  border: 1px solid #e4eae0;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #fbfcf9, #f5f8f1);
+}
+.tree-root,
+.tree-children ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tree-root > .tree-item {
+  padding: 0;
+}
+.tree-item {
+  min-width: 215px;
+  padding-top: 8px;
+  position: relative;
+}
+.tree-branch-label {
+  color: #687b6b;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  margin-bottom: 6px;
+}
+.tree-children {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-left: 13px;
+  padding-left: 13px;
+  border-left: 2px solid #d3dfcf;
+}
+.tree-children > ul {
+  border-top: 2px solid #d3dfcf;
+  padding-top: 9px;
+}
+.tree-empty {
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed #c7d4c4;
+  border-radius: 10px;
+  padding: 15px;
+  color: #53695b;
+  background: #ffffffa8;
+}
+.tree-empty b {
+  font-size: 13px;
+}
+.tree-empty span {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #77877b;
+}
+.tree-node {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 110px;
+  background: #fff;
+  border: 1px solid #dce5d9;
+  color: #304a3e;
+  text-align: left;
+}
+.tree-node:hover,
+.tree-node.selected {
+  background: #edf3e6;
+  border-color: #739477;
+}
+.tree-node.on-path {
+  border-left: 4px solid #64875d;
+}
+.tree-node.conclusion-node {
+  outline: 2px solid #d6a643;
+  outline-offset: 2px;
+}
+.tree-node small {
+  color: #657968;
+  letter-spacing: 0.7px;
+}
+.tree-node strong {
+  line-height: 1.5;
+}
+.tree-node span {
+  font-size: 12px;
+  font-weight: 400;
+}
+.tree-detail {
+  border: 1px solid #e0e7da;
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 6px 20px #203a2008;
+}
+.tree-detail h3 {
+  margin-top: 0;
+}
+.tree-example {
+  border: 1px solid #e0e7da;
+  background: #fff;
+  padding: 14px 18px;
+  border-radius: 12px;
+}
+.example-flow {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  overflow: auto;
+  padding: 12px 2px 16px;
+}
+.example-node {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  justify-content: center;
+  min-height: 120px;
+  padding: 16px;
+  border: 1px solid #cddbc8;
+  border-radius: 11px;
+  background: #f4f8ef;
+  color: #334b3d;
+}
+.example-node.exception {
+  border-color: #e2c983;
+  background: #fffaf0;
+}
+.example-node small,
+.example-link span {
+  font-size: 10px;
+  letter-spacing: 0.7px;
+  color: #738275;
+  font-weight: 700;
+}
+.example-node b {
+  line-height: 1.5;
+}
+.example-node span {
+  font-size: 12px;
+  color: #627266;
+}
+.example-link {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  color: #68835e;
+}
+.example-link b {
+  font-size: 24px;
+}
+.outcome-box {
+  margin-top: 22px !important;
+}
 .table-scroll {
   overflow: auto;
 }
@@ -619,6 +825,13 @@ ol {
     padding: 14px 11px;
     gap: 9px;
   }
+  .stats > button,
+  .stats > .step-static {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 14px 11px;
+    gap: 9px;
+  }
 }
 @media (max-width: 720px) {
   .shell {
@@ -716,5 +929,11 @@ ol {
   .case-row {
     flex-wrap: wrap;
     gap: 5px;
+  }
+  .tree-layout {
+    grid-template-columns: 1fr;
+  }
+  .tree-canvas {
+    max-width: calc(100vw - 48px);
   }
 }

@@ -122,11 +122,12 @@ src/styles.css         Tampilan dasar responsif
 - [Kontrak API](./docs/API.md)
 - [Keputusan teknis](./docs/DECISIONS.md)
 - [Serah terima A → B](./HANDOFF_A_TO_B.md)
+- [Skenario demo dan bahan presentasi](./docs/PRESENTASI_DEMO.md)
 
 ## Batas penggunaan
 
 Aplikasi ditujukan untuk demonstrasi lokal. Pilihan peran adalah perpindahan tampilan, bukan autentikasi. Server mengikat loopback dan tidak melakukan pemanggilan AI, pemasangan skill, atau pembelian subscription. Jangan mempublikasikannya sebagai aplikasi multiuser sebelum menambahkan autentikasi dan otorisasi.
 
-Pohon masih berupa tabel dan trace berupa daftar. Editor katalog visual, formulir outcome, visualisasi pohon interaktif, penyempurnaan UX, dan bahan presentasi akhir dilanjutkan Person B. Belum ada hasil benchmark penghematan token.
+Pohon menampilkan cabang kiri FALSE dan kanan TRUE, trace konsultasi aktif, node kesimpulan, serta detail kondisi/cornerstone. Pakar dapat mengubah metadata katalog dan mencatat outcome task. Katalog awal tetap sintetis dan berlabel DEMO. Belum ada hasil benchmark penghematan token.
 
 Pengujian UI memakai React Testing Library + jsdom dengan backend Fastify dan SQLite nyata melalui app.inject. Ini memeriksa interaksi dan integrasi, bukan pemeriksaan visual pada browser nyata. Status verifikasi aktual serta batas browser QA dicatat pada handoff.
