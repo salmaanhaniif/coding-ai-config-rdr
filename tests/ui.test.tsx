@@ -11,7 +11,7 @@ import App from '../src/App';
 let store: Store;
 let server: FastifyInstance;
 beforeEach(async () => {
-  store = new Store(':memory:');
+  store = new Store(':memory:', { catalog: demoCatalog() });
   server = await createApp(store, { staticRoot: 'missing-dist' });
   vi.stubGlobal('fetch', async (url: string, options: RequestInit = {}) => {
     const r = await server.inject({
@@ -42,8 +42,8 @@ it('UI terhubung ke backend nyata: profil → konsultasi → bootstrap → korek
   await user.click(screen.getByRole('button', { name: 'Simpan profil akses' }));
   await screen.findByText('Profil akses tersimpan. Lanjutkan isi task.');
   expect(screen.getByRole('button', { name: /Ubah akses/ })).toBeTruthy();
-  await user.type(screen.getByLabelText('Deskripsi task'), 'Perbaiki validasi login');
-  await user.type(screen.getByLabelText('Kriteria selesai'), 'Tes login lulus');
+  await user.type(screen.getByLabelText('Task description'), 'Perbaiki validasi login');
+  await user.type(screen.getByLabelText('Acceptance criteria'), 'Tes login lulus');
   await user.click(screen.getByRole('button', { name: 'Dapatkan rekomendasi →' }));
   await screen.findByText('Sementara · perlu penilaian');
   await user.click(screen.getByRole('button', { name: 'Lanjut ke penilaian pakar' }));
@@ -66,7 +66,7 @@ it('UI terhubung ke backend nyata: profil → konsultasi → bootstrap → korek
   );
   await user.click(screen.getByRole('button', { name: '+ Percobaan gagal gte 3' }));
   await user.selectOptions(
-    screen.getByLabelText('Paket konfigurasi pengganti'),
+    screen.getByLabelText('Replacement configuration'),
     'demo-codex-deep-profile',
   );
   await user.clear(screen.getByLabelText('Nilai kondisi'));
@@ -83,12 +83,12 @@ it('UI terhubung ke backend nyata: profil → konsultasi → bootstrap → korek
   await screen.findByText('Aturan baru tersimpan dan hasil disetujui.');
   expect(store.rules()).toHaveLength(2);
   expect(store.list<{ status: string }>('consultations').at(-1)?.status).toBe('CORRECTED_APPROVED');
-  await user.click(screen.getByRole('button', { name: 'Pengetahuan RDR' }));
-  expect(await screen.findByRole('tree', { name: 'Pohon aturan RDR' })).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Rule tree' }));
+  expect(await screen.findByRole('tree', { name: 'RDR rule tree' })).toBeTruthy();
   expect(screen.getAllByText('KANAN · TRUE').length).toBeGreaterThan(0);
   expect(screen.getByText(/Trace konsultasi yang sedang dibuka/)).toBeTruthy();
   expect(screen.getByText('Perlu investigasi karena percobaan gagal berulang.')).toBeTruthy();
-  await user.click(screen.getByRole('button', { name: 'Riwayat task' }));
+  await user.click(screen.getByRole('button', { name: 'Task history' }));
   await user.type(screen.getAllByLabelText('Bukti/catatan')[0], 'Tes terkait lulus');
   await user.click(screen.getAllByRole('button', { name: 'Simpan laporan' })[0]);
   await screen.findByText('Laporan hasil tersimpan.');
@@ -131,7 +131,7 @@ it('UI katalog menyimpan perubahan model ke backend dengan version check', async
   render(<App />);
   await screen.findByLabelText('Nama profil');
   await user.selectOptions(screen.getByLabelText('Tampilan peran'), 'expert');
-  await user.click(screen.getByRole('button', { name: 'Katalog DEMO' }));
+  await user.click(screen.getByRole('button', { name: 'Model catalog' }));
   const nameFields = await screen.findAllByLabelText('Nama model');
   const modelCount = store.catalog().models.length;
   await user.clear(nameFields[0]);
@@ -165,8 +165,22 @@ it('form konsultasi memandu pengguna dari profil tersimpan ke tahap task', async
   const user = userEvent.setup();
   render(<App />);
   const next = await screen.findByRole('button', { name: 'Lanjut: isi task →' });
-  expect(screen.queryByLabelText('Deskripsi task')).toBeNull();
+  expect(screen.queryByLabelText('Task description')).toBeNull();
   await user.click(next);
-  expect(await screen.findByLabelText('Deskripsi task')).toBeTruthy();
+  expect(await screen.findByLabelText('Task description')).toBeTruthy();
   expect(screen.getByRole('button', { name: /Ubah akses/ })).toBeTruthy();
 });
+
+it('layout awal mempertahankan sidebar, menu, dan alur konsultasi dengan judul langsung', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  expect(await screen.findByRole('heading', { level: 1, name: 'Konsultasi' })).toBeTruthy();
+  const sidebar = screen.getByRole('complementary');
+  expect(within(sidebar).getByRole('button', { name: 'Konsultasi' })).toBeTruthy();
+  expect(within(sidebar).getByRole('button', { name: 'Rule tree' })).toBeTruthy();
+  expect(within(sidebar).getByRole('button', { name: 'Task history' })).toBeTruthy();
+  expect(screen.getByLabelText('Tahapan konsultasi')).toBeTruthy();
+  await user.click(within(sidebar).getByRole('button', { name: 'Rule tree' }));
+  expect(await screen.findByRole('heading', { level: 1, name: 'Rule tree' })).toBeTruthy();
+});
+import { demoCatalog } from '../server/catalog.js';

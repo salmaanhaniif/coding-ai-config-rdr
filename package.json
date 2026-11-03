@@ -13,7 +13,9 @@
     "test": "vitest run",
     "db:init": "tsx server/migrate.ts",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write src server shared scripts tests *.ts *.json README.md HANDOFF_A_TO_B.md docs/*.md"
+    "format": "prettier --write src server shared scripts tests *.ts *.json README.md HANDOFF_A_TO_B.md docs/*.md",
+    "demo:expert": "tsx scripts/expert-demo.ts",
+    "dev:expert": "tsx scripts/dev-expert.ts"
   },
   "dependencies": {
     "@fastify/static": "^10.1.8",

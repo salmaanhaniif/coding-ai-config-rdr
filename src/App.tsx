@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
   attributes,
+  services,
   type AccessInput,
   type AccessProfile,
   type CaseInput,
@@ -21,6 +22,7 @@ import {
   ResultCard,
   conditionLabel,
   valueLabel,
+  statusLabel,
 } from './components';
 
 type View = 'consult' | 'result' | 'expert' | 'tree' | 'catalog' | 'history';
@@ -37,6 +39,7 @@ function TreeBranch({
   onSelect,
   trace,
   last,
+  depth = 0,
 }: {
   id: string;
   branch?: 'false' | 'true';
@@ -45,8 +48,13 @@ function TreeBranch({
   onSelect: (id: string) => void;
   trace: { nodeId: string; matched: boolean }[];
   last?: string;
+  depth?: number;
 }) {
   const node = nodes.find((n) => n.id === id);
+  const [expanded, setExpanded] = useState(depth < 2 || trace.some((t) => t.nodeId === id));
+  useEffect(() => {
+    if (trace.some((t) => t.nodeId === id)) setExpanded(true);
+  }, [trace, id]);
   if (!node) return null;
   const hit = trace.find((t) => t.nodeId === id);
   return (
@@ -72,7 +80,17 @@ function TreeBranch({
             : node.conclusion.snapshot.profile.name}
         </span>
       </button>
-      <div className="tree-children">
+      {(node.falseChild || node.trueChild) && (
+        <button
+          type="button"
+          className="ghost tree-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? 'Tutup cabang' : 'Buka cabang'}
+        </button>
+      )}
+      <div className="tree-children" hidden={!expanded}>
         {node.falseChild && (
           <ul>
             <TreeBranch
@@ -83,6 +101,7 @@ function TreeBranch({
               onSelect={onSelect}
               trace={trace}
               last={last}
+              depth={depth + 1}
             />
           </ul>
         )}
@@ -96,6 +115,7 @@ function TreeBranch({
               onSelect={onSelect}
               trace={trace}
               last={last}
+              depth={depth + 1}
             />
           </ul>
         )}
@@ -132,7 +152,7 @@ export default function App() {
     name: 'Akses saya',
     services: ['codex'],
     primaryService: 'codex',
-    packageName: 'DEMO lokal',
+    packageName: '',
     modelIds: [],
     confirmed: true,
     priority: 'balanced',
@@ -252,7 +272,7 @@ export default function App() {
       );
     });
   };
-  const switchService = (service: 'codex' | 'claude-code', checked: boolean) =>
+  const switchService = (service: AccessInput['primaryService'], checked: boolean) =>
     setAccess((v) => {
       const services = checked ? [...v.services, service] : v.services.filter((s) => s !== service);
       const primaryService = services.includes(v.primaryService)
@@ -278,18 +298,20 @@ export default function App() {
   };
   const addDemoModel = () => {
     if (!catalogDraft) return;
-    const modelId = newCatalogId('demo-model');
+    const demo = catalogDraft.models.every((m) => m.demo);
+    const modelId = newCatalogId(demo ? 'demo-model' : 'model');
     setCatalogDraft({
       ...catalogDraft,
       models: [
         ...catalogDraft.models,
         {
           id: modelId,
-          name: 'Model DEMO baru',
+          name: demo ? 'Model DEMO baru' : 'Model baru',
           service: 'codex',
-          efforts: ['default'],
+          efforts: demo ? ['default'] : ['low', 'medium', 'high'],
+          thinkingModes: demo ? undefined : ['enabled'],
           active: true,
-          demo: true,
+          demo,
           source: '',
           verifiedAt: null,
         },
@@ -309,9 +331,10 @@ export default function App() {
         ...catalogDraft.profiles,
         {
           id: newCatalogId('demo-profile'),
-          name: 'Profil DEMO baru',
+          name: model.demo ? 'Profil DEMO baru' : 'Profil baru',
           modelId: model.id,
           effort: model.efforts[0],
+          thinking: model.thinkingModes?.[0],
           mode: 'execution',
           skillIds: [],
           nextStep: 'Jelaskan tindakan berikutnya.',
@@ -351,10 +374,10 @@ export default function App() {
   const final = detail && ['APPROVED', 'CORRECTED_APPROVED'].includes(detail.consultation.status);
   const tabs: [View, string, string][] = [
     ['consult', 'Konsultasi', '01'],
-    ['expert', 'Meja pakar', '02'],
-    ['tree', 'Pengetahuan RDR', '03'],
-    ['history', 'Riwayat task', '04'],
-    ['catalog', 'Katalog DEMO', '05'],
+    ['expert', 'Expert review', '02'],
+    ['tree', 'Rule tree', '03'],
+    ['history', 'Task history', '04'],
+    ['catalog', 'Model catalog', '05'],
   ];
   return (
     <div className="shell">
@@ -374,7 +397,7 @@ export default function App() {
             DevPilot<small>RIPPLE DOWN RULES</small>
           </div>
         </a>
-        <div className="workspace-label">WORKSPACE LOKAL</div>
+        <div className="workspace-label">Ruang kerja</div>
         <nav>
           {tabs
             .filter((t) => role === 'expert' || t[0] !== 'expert')
@@ -398,16 +421,16 @@ export default function App() {
         </nav>
         <div className="sidebar-bottom">
           <p>
-            Keputusan berbasis aturan.
+            Rekomendasi model AI
             <br />
-            Ditinjau oleh pakar.
+            untuk pekerjaan developer.
           </p>
           <small>DevPilot RDR · Demo lokal</small>
         </div>
       </aside>
       <main>
         <header>
-          <span>AI CONFIGURATION ADVISOR</span>
+          <span>Rekomendasi konfigurasi AI</span>
           <label className="role-select">
             Tampilan{' '}
             <select
@@ -427,30 +450,30 @@ export default function App() {
           <div className="page-heading">
             <div>
               <div className="eyebrow">
-                DEVPILOT /{' '}
-                {view === 'result'
-                  ? 'HASIL KONSULTASI'
-                  : tabs.find((t) => t[0] === view)?.[1].toUpperCase()}
+                DevPilot /{' '}
+                {view === 'result' ? 'Hasil konsultasi' : tabs.find((t) => t[0] === view)?.[1]}
               </div>
               <h1>
                 {view === 'consult'
-                  ? 'Mulai dengan konfigurasi yang tepat.'
+                  ? 'Konsultasi'
                   : view === 'expert'
-                    ? 'Pengetahuan tumbuh dari koreksi.'
+                    ? 'Expert review'
                     : view === 'tree'
-                      ? 'Lacak alasan setiap keputusan.'
+                      ? 'Rule tree'
                       : view === 'history'
-                        ? 'Setiap percobaan punya konteks.'
+                        ? 'Task history'
                         : view === 'catalog'
-                          ? 'Pilihan yang tersedia.'
-                          : 'Langkah berikutnya untuk task-mu.'}
+                          ? 'Model catalog'
+                          : 'Model recommendation'}
               </h1>
             </div>
             <span className="badge">{data ? 'KB v' + data.kbVersion : 'Menghubungkan…'}</span>
           </div>
           <div className="demo-banner">
-            <span>DEMO</span> Model dan effort pada katalog awal adalah data sintetis untuk menguji
-            sistem, bukan rekomendasi produk nyata.
+            <span>MODEL CATALOG</span>{' '}
+            {data?.catalog.models.every((m) => m.demo)
+              ? 'Katalog lama masih memakai model DEMO. Jalankan npm run dev tanpa DB_PATH untuk membuka basis pengetahuan model nyata.'
+              : 'Model nyata dengan effort eksplisit dan sumber resmi. Konfirmasikan akses sesuai akun Anda.'}
           </div>
           {error && (
             <div className="alert" role="alert">
@@ -489,7 +512,7 @@ export default function App() {
                       type="button"
                     >
                       <strong>01</strong>
-                      <span>Konfirmasi akses</span>
+                      <span>Profil akses</span>
                     </button>
                     <button
                       className={consultStep === 2 ? 'current' : ''}
@@ -498,7 +521,7 @@ export default function App() {
                       disabled={!accessId}
                     >
                       <strong>02</strong>
-                      <span>Ceritakan task</span>
+                      <span>Detail task</span>
                     </button>
                     <div className="step-static">
                       <strong>03</strong>
@@ -509,7 +532,7 @@ export default function App() {
                     <section className="panel">
                       <div className="row between">
                         <h2>Akses AI yang dimiliki</h2>
-                        <span className="muted">Subscription & model</span>
+                        <span className="muted">Subscription & models</span>
                       </div>
                       <Field
                         label="Gunakan profil tersimpan"
@@ -546,7 +569,7 @@ export default function App() {
                               </Field>
                             </div>
                             <div className="checkboxes">
-                              {(['codex', 'claude-code'] as const).map((s) => (
+                              {services.map((s) => (
                                 <label key={s}>
                                   <input
                                     type="checkbox"
@@ -557,6 +580,11 @@ export default function App() {
                                 </label>
                               ))}
                             </div>
+                            <p className="muted">
+                              ChatGPT berarti mode Work. Pilih satu layanan atau beberapa sekaligus
+                              sesuai akses Anda; paket ChatGPT tidak otomatis mengonfirmasi semua
+                              model Codex.
+                            </p>
                             <div className="form-grid">
                               <Field label="Layanan utama">
                                 <select
@@ -692,7 +720,7 @@ export default function App() {
                               ? 'jelaskan kebutuhan dan bukti selesai.'
                               : 'catat konfigurasi yang dicoba serta gejala kegagalan.'}
                           </p>
-                          <Field label="Deskripsi task">
+                          <Field label="Task description">
                             <textarea
                               required
                               rows={3}
@@ -702,7 +730,7 @@ export default function App() {
                             />
                           </Field>
                           <Field
-                            label="Kriteria selesai"
+                            label="Acceptance criteria"
                             hint="Tuliskan bukti yang dapat diperiksa, misalnya langkah reproduksi berhasil dan tes terkait lulus."
                           >
                             <textarea
@@ -898,7 +926,7 @@ export default function App() {
                                 .find((t) => t.id === c.taskId)
                                 ?.description.slice(0, 75) ?? 'Konsultasi'}
                             </span>
-                            <small>{c.status.replaceAll('_', ' ')}</small>
+                            <small>{statusLabel(c.status)}</small>
                           </button>
                         ))
                       ) : (
@@ -1005,7 +1033,7 @@ export default function App() {
                                 >
                                   Tambah kondisi manual
                                 </button>
-                                <Field label="Paket konfigurasi pengganti">
+                                <Field label="Replacement configuration">
                                   <select
                                     value={profileId}
                                     onChange={(e) => {
@@ -1106,7 +1134,7 @@ export default function App() {
                     TRUE.
                   </p>
                   <div className="tree-layout">
-                    <div className="tree-canvas" role="tree" aria-label="Pohon aturan RDR">
+                    <div className="tree-canvas" role="tree" aria-label="RDR rule tree">
                       <ul className="tree-root">
                         <TreeBranch
                           id="root"
@@ -1211,14 +1239,14 @@ export default function App() {
                     </button>
                   </div>
                   <p className="muted">
-                    Katalog awal ditandai DEMO. Model nyata harus menyertakan URL sumber dan tanggal
-                    verifikasi. Perubahan katalog tidak mengubah snapshot rekomendasi lama.
+                    Model nyata menyertakan URL sumber, tanggal verifikasi, effort, dan dukungan
+                    thinking. Perubahan katalog tidak mengubah snapshot rekomendasi lama.
                   </p>
                   {catalogDraft && (
                     <>
                       <h3>Default layanan</h3>
                       <div className="form-grid">
-                        {(['codex', 'claude-code'] as const).map((s) => (
+                        {services.map((s) => (
                           <Field key={s} label={'Default · ' + valueLabel(s)}>
                             <select
                               value={catalogDraft.defaults[s] ?? ''}
@@ -1252,14 +1280,16 @@ export default function App() {
                       <div className="row between catalog-section-title">
                         <h3>Model dan effort</h3>
                         <button type="button" className="secondary" onClick={addDemoModel}>
-                          Tambah model DEMO
+                          {catalogDraft?.models.every((m) => m.demo)
+                            ? 'Tambah model DEMO'
+                            : 'Tambah model'}
                         </button>
                       </div>
                       <div className="catalog-grid">
                         {catalogDraft.models.map((m, i) => (
                           <article className="subpanel" key={m.id}>
                             <span className="badge">
-                              {m.demo ? 'DEMO' : 'Entri nyata · verifikasi pakar'}
+                              {m.demo ? 'DEMO' : 'Model nyata · sumber resmi'}
                             </span>
                             <label className="check">
                               <input
@@ -1311,6 +1341,7 @@ export default function App() {
                                 >
                                   <option value="codex">Codex</option>
                                   <option value="claude-code">Claude Code</option>
+                                  <option value="chatgpt">ChatGPT Work</option>
                                 </select>
                               </Field>
                               <Field label="Effort, pisahkan dengan koma">
@@ -1328,6 +1359,37 @@ export default function App() {
                                     setCatalogDraft({ ...catalogDraft, models });
                                   }}
                                 />
+                              </Field>
+                              <Field label="ID model di layanan">
+                                <input
+                                  value={m.runtimeId ?? ''}
+                                  placeholder="Contoh: gpt-6.1-sol"
+                                  onChange={(e) => {
+                                    const models = [...catalogDraft.models];
+                                    models[i] = { ...m, runtimeId: e.target.value || undefined };
+                                    setCatalogDraft({ ...catalogDraft, models });
+                                  }}
+                                />
+                              </Field>
+                              <Field label="Dukungan thinking">
+                                <select
+                                  value={m.thinkingModes?.[0] ?? ''}
+                                  onChange={(e) => {
+                                    const models = [...catalogDraft.models];
+                                    models[i] = {
+                                      ...m,
+                                      thinkingModes: e.target.value
+                                        ? [e.target.value as 'enabled' | 'adaptive' | 'disabled']
+                                        : undefined,
+                                    };
+                                    setCatalogDraft({ ...catalogDraft, models });
+                                  }}
+                                >
+                                  <option value="">Belum ditetapkan</option>
+                                  <option value="enabled">Aktif melalui reasoning effort</option>
+                                  <option value="adaptive">Aktif · adaptif</option>
+                                  <option value="disabled">Nonaktif</option>
+                                </select>
                               </Field>
                               <Field label="Sumber resmi">
                                 <input
@@ -1361,7 +1423,9 @@ export default function App() {
                       <div className="row between catalog-section-title">
                         <h3>Profil konfigurasi</h3>
                         <button type="button" className="secondary" onClick={addDemoProfile}>
-                          Tambah profil DEMO
+                          {catalogDraft?.models.every((m) => m.demo)
+                            ? 'Tambah profil DEMO'
+                            : 'Tambah profil'}
                         </button>
                       </div>
                       <div className="catalog-grid">
@@ -1383,7 +1447,17 @@ export default function App() {
                                   value={p.modelId}
                                   onChange={(e) => {
                                     const profiles = [...catalogDraft.profiles];
-                                    profiles[i] = { ...p, modelId: e.target.value };
+                                    const model = catalogDraft.models.find(
+                                      (m) => m.id === e.target.value,
+                                    )!;
+                                    profiles[i] = {
+                                      ...p,
+                                      modelId: model.id,
+                                      effort: model.efforts.includes(p.effort)
+                                        ? p.effort
+                                        : model.efforts[0],
+                                      thinking: model.thinkingModes?.[0],
+                                    };
                                     setCatalogDraft({ ...catalogDraft, profiles });
                                   }}
                                 >
@@ -1408,6 +1482,29 @@ export default function App() {
                                     []
                                   ).map((x) => (
                                     <option key={x}>{x}</option>
+                                  ))}
+                                </select>
+                              </Field>
+                              <Field label="Mode thinking">
+                                <select
+                                  value={p.thinking ?? ''}
+                                  onChange={(e) => {
+                                    const profiles = [...catalogDraft.profiles];
+                                    profiles[i] = {
+                                      ...p,
+                                      thinking: e.target.value as typeof p.thinking,
+                                    };
+                                    setCatalogDraft({ ...catalogDraft, profiles });
+                                  }}
+                                >
+                                  <option value="">Belum ditetapkan</option>
+                                  {(
+                                    catalogDraft.models.find((m) => m.id === p.modelId)
+                                      ?.thinkingModes ?? []
+                                  ).map((t) => (
+                                    <option key={t} value={t}>
+                                      {t}
+                                    </option>
                                   ))}
                                 </select>
                               </Field>
@@ -1573,7 +1670,7 @@ export default function App() {
                             <div className="field">
                               <span className="field-title">Kompatibel dengan layanan</span>
                               <div className="checkboxes">
-                                {(['codex', 'claude-code'] as const).map((service) => (
+                                {services.map((service) => (
                                   <label key={service}>
                                     <input
                                       type="checkbox"
@@ -1634,7 +1731,7 @@ export default function App() {
                                   timeZone: 'Asia/Jakarta',
                                 })}
                               </span>
-                              <small>{c.status.replaceAll('_', ' ')}</small>
+                              <small>{statusLabel(c.status)}</small>
                             </button>
                           ))}
                         <section className="subpanel outcome-box">

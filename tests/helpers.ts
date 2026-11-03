@@ -1,8 +1,9 @@
 import { Advisor } from '../server/service.js';
 import { Store } from '../server/store.js';
+import { demoCatalog } from '../server/catalog.js';
 import type { AccessProfile, CaseInput, ConsultationDetail } from '../shared/domain.js';
 export function setup() {
-  const store = new Store(':memory:');
+  const store = new Store(':memory:', { catalog: demoCatalog() });
   const advisor = new Advisor(store);
   const access = advisor.createAccess({
     name: 'Test',

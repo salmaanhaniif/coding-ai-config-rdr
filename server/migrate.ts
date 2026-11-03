@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
-import { Store } from './store.js';
-const store = new Store(resolve(process.env.DB_PATH ?? 'data/devpilot.sqlite'));
+import { openRuntimeStore } from './runtime-store.js';
+const store = openRuntimeStore();
 console.log(
   'Database siap. KB v' +
     store.version('kb') +

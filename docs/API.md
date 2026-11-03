@@ -35,14 +35,16 @@ Tidak ada endpoint mengedit/hapus node, menimpa kasus final, atau reset KB. Oper
   "name": "Akses latihan",
   "services": ["codex", "claude-code"],
   "primaryService": "codex",
-  "packageName": "DEMO lokal",
-  "modelIds": ["demo-codex-basic", "demo-codex-deep"],
+  "packageName": "Paket pengguna, akses model dikonfirmasi sendiri",
+  "modelIds": ["gpt-6.1-sol", "gpt-6-astra", "claude-sonnet-5-5"],
   "confirmed": true,
   "priority": "balanced"
 }
 ```
 
 Layanan utama harus termasuk services. Semua modelIds harus terdapat pada katalog dan sesuai layanan yang dipilih. confirmed=true membutuhkan setidaknya satu model. confirmed=false boleh digunakan untuk menyimpan ketidakpastian, tetapi hasilnya tidak dapat disetujui sebagai konfigurasi runnable.
+
+Layanan mendukung `codex`, `claude-code`, dan `chatgpt` (ChatGPT Work), maksimal tiga pilihan. Task juga mendukung `review`, `tests`, `docs`, `architecture`, dan `security`. Model nyata memiliki `runtimeId` dan `thinkingModes`; profil menyimpan `thinking` serta effort eksplisit. Operator set `not_contains` memeriksa ketiadaan anggota; nilai unknown tetap tidak cocok. Profil akses internal kasus acuan tidak disajikan pada `overview.accesses`.
 
 Profil dan kasus disimpan sebagai snapshot. Untuk akses yang berubah, buat profil baru dan konsultasi ulang; jangan mengubah snapshot konsultasi lama.
 
@@ -67,8 +69,8 @@ Ganti accessId dengan ID dari POST /accesses. taskId opsional menautkan konsulta
     "failures": 3,
     "timeLimit": null,
     "symptoms": ["repeated", "no-cause"],
-    "currentModelId": "demo-codex-basic",
-    "currentEffort": "default"
+    "currentModelId": "gpt-6.1-sol",
+    "currentEffort": "medium"
   }
 }
 ```
@@ -96,7 +98,7 @@ Versi harus sama dengan versi konsultasi dan versi aktif. Bootstrap persetujuan 
   "kbVersion": 2,
   "catalogVersion": 1,
   "reason": "Perlu investigasi untuk percobaan gagal berulang.",
-  "profileId": "demo-codex-deep-profile",
+  "profileId": "codex-investigate",
   "condition": {
     "type": "and",
     "terms": [

@@ -7,7 +7,7 @@ import type { AccessProfile, ConsultationDetail } from '../shared/domain.js';
 let store: Store;
 let app: FastifyInstance;
 beforeEach(async () => {
-  store = new Store(':memory:');
+  store = new Store(':memory:', { catalog: demoCatalog() });
   app = await createApp(store, { staticRoot: 'does-not-exist' });
 });
 afterEach(async () => {
@@ -159,3 +159,4 @@ it('hasil build dapat disajikan bersama API tanpa membocorkan route API ke fallb
     rmSync(dir, { recursive: true, force: true });
   }
 });
+import { demoCatalog } from '../server/catalog.js';

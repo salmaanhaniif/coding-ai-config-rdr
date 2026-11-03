@@ -33,13 +33,13 @@ export class Advisor {
       kbVersion: s.version('kb'),
       catalog: s.catalog(),
       nodes: s.rules(),
-      accesses: s.list('accesses'),
+      accesses: s.list<AccessProfile>('accesses').filter((a) => !a.reference),
       consultations: s.list<Consultation>('consultations').reverse(),
       tasks: s.list('tasks'),
       bootstrapNeeded: !s.rules().find((n) => n.id === 'root')!.cornerstoneId,
     };
   }
-  createAccess(input: unknown) {
+  createAccess(input: unknown, options: { reference?: true } = {}) {
     const v = accessSchema.parse(input);
     const catalog = this.store.catalog();
     for (const id of v.modelIds) {
@@ -50,7 +50,12 @@ export class Advisor {
         'Model tidak ditemukan atau tidak cocok dengan layanan.',
       );
     }
-    const a: AccessProfile = { ...v, id: uid(), createdAt: now() };
+    const a: AccessProfile = {
+      ...v,
+      id: uid(),
+      createdAt: now(),
+      ...(options.reference ? { reference: true } : {}),
+    };
     this.store.insertAccess(a);
     return a;
   }

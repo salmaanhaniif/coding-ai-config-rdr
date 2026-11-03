@@ -1,11 +1,25 @@
 import { z } from 'zod';
 
-export const services = ['codex', 'claude-code'] as const;
+export const services = ['codex', 'claude-code', 'chatgpt'] as const;
 export const serviceSchema = z.enum(services);
-export const serviceLabels = { codex: 'Codex', 'claude-code': 'Claude Code' };
+export const serviceLabels = {
+  codex: 'Codex',
+  'claude-code': 'Claude Code',
+  chatgpt: 'ChatGPT Work',
+};
+export const taskTypes = [
+  'bug',
+  'feature',
+  'refactor',
+  'review',
+  'tests',
+  'docs',
+  'architecture',
+  'security',
+] as const;
 export const attributes = {
   taskStatus: { label: 'Status task', kind: 'category', options: ['start', 'stuck'] },
-  taskType: { label: 'Jenis task', kind: 'category', options: ['bug', 'feature', 'refactor'] },
+  taskType: { label: 'Jenis task', kind: 'category', options: taskTypes },
   clarity: {
     label: 'Kejelasan kebutuhan',
     kind: 'category',
@@ -42,8 +56,14 @@ export const labels: Record<string, string> = {
   start: 'Mulai task',
   stuck: 'Task macet',
   bug: 'Bug fixing',
-  feature: 'Fitur kecil',
+  feature: 'Pengembangan fitur',
   refactor: 'Refactoring',
+  review: 'Code review',
+  tests: 'Menulis pengujian',
+  docs: 'Dokumentasi',
+  architecture: 'Desain arsitektur',
+  security: 'Audit keamanan',
+  chatgpt: 'ChatGPT Work',
   clear: 'Jelas',
   partial: 'Sebagian jelas',
   unclear: 'Belum jelas',
@@ -75,7 +95,7 @@ const nonnegative = z.number().finite().nonnegative();
 export const accessSchema = z
   .object({
     name: text.max(100),
-    services: z.array(serviceSchema).min(1).max(2),
+    services: z.array(serviceSchema).min(1).max(3),
     primaryService: serviceSchema,
     packageName: z.string().trim().max(120).default('Belum diketahui'),
     modelIds: z.array(id).max(100),
@@ -92,11 +112,11 @@ export const accessSchema = z
       ctx.addIssue({ code: 'custom', message: 'Konfirmasi akses memerlukan model yang tersedia.' });
   });
 export type AccessInput = z.infer<typeof accessSchema>;
-export type AccessProfile = AccessInput & { id: string; createdAt: string };
+export type AccessProfile = AccessInput & { id: string; createdAt: string; reference?: boolean };
 export const taskAttributesSchema = z
   .object({
     taskStatus: z.enum(['start', 'stuck']),
-    taskType: z.enum(['bug', 'feature', 'refactor']),
+    taskType: z.enum(taskTypes),
     clarity: z.enum(['clear', 'partial', 'unclear']).nullable(),
     scope: z.enum(['function', 'files', 'modules']).nullable(),
     familiarity: z.enum(['low', 'medium', 'high']).nullable(),
@@ -155,6 +175,7 @@ export const operators = [
   'not_equals',
   'in',
   'contains',
+  'not_contains',
   'gt',
   'gte',
   'lt',
@@ -192,7 +213,7 @@ export const predicateSchema = z
           p.value.every((v) => (meta.options as readonly string[]).includes(v)));
     if (meta.kind === 'set')
       valid =
-        p.op === 'contains' &&
+        ['contains', 'not_contains'].includes(p.op) &&
         typeof p.value === 'string' &&
         (meta.options as readonly string[]).includes(p.value);
     if (!valid)
@@ -217,11 +238,18 @@ export const modelSchema = z
     name: text.max(160),
     service: serviceSchema,
     efforts: z.array(id).min(1).max(12),
+    runtimeId: id.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/).optional(),
+    thinkingModes: z
+      .array(z.enum(['enabled', 'disabled', 'adaptive']))
+      .min(1)
+      .optional(),
     active: z.boolean(),
     ...provenance,
   })
   .strict()
   .superRefine((m, ctx) => {
+    if (!m.demo && !m.runtimeId)
+      ctx.addIssue({ code: 'custom', message: 'Model nyata memerlukan ID model di layanan.' });
     if (
       !m.demo &&
       (!URL.canParse(m.source) || !m.verifiedAt || Number.isNaN(Date.parse(m.verifiedAt)))
@@ -247,6 +275,7 @@ export const profileSchema = z
     name: text.max(160),
     modelId: id,
     effort: id,
+    thinking: z.enum(['enabled', 'disabled', 'adaptive']).optional(),
     mode: z.enum(['execution', 'investigation', 'planning']),
     skillIds: z.array(id).max(10),
     nextStep: text,
@@ -262,7 +291,13 @@ export const catalogSchema = z
     models: z.array(modelSchema).min(1).max(100),
     skills: z.array(skillSchema).max(100),
     profiles: z.array(profileSchema).min(1).max(200),
-    defaults: z.object({ codex: id.nullable(), 'claude-code': id.nullable() }).strict(),
+    defaults: z
+      .object({
+        codex: id.nullable(),
+        'claude-code': id.nullable(),
+        chatgpt: id.nullable().optional(),
+      })
+      .strict(),
   })
   .strict();
 export type Catalog = z.infer<typeof catalogSchema>;

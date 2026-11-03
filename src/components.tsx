@@ -1,4 +1,5 @@
 import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from 'react';
+import { configurationText, setupInstructions, thinkingLabel } from '../shared/recommendation';
 import {
   attributes,
   labels,
@@ -37,6 +38,26 @@ export const valueLabel = (v: unknown) =>
     : Array.isArray(v)
       ? v.map((x) => labels[String(x)] ?? x).join(', ') || 'Tidak ada'
       : (labels[String(v)] ?? String(v));
+export function statusLabel(value: string): string {
+  return (
+    (
+      {
+        PENDING_EXPERT: 'Menunggu penilaian',
+        CORRECTION_DRAFT: 'Draft koreksi',
+        NEEDS_INFORMATION: 'Perlu informasi',
+        APPROVED: 'Disetujui',
+        CORRECTED_APPROVED: 'Disetujui setelah koreksi',
+      } as Record<string, string>
+    )[value] ?? value
+  );
+}
+const reviewLabels: Record<string, string> = {
+  approved: 'Disetujui',
+  corrected: 'Dikoreksi dan disetujui',
+  needs_information: 'Meminta informasi',
+  draft_saved: 'Draft tersimpan',
+  refreshed: 'Inferensi diperbarui',
+};
 export function conditionLabel(c: Condition) {
   return c.type === 'always'
     ? 'TRUE — selalu berlaku'
@@ -53,11 +74,12 @@ export function conditionLabel(c: Condition) {
 export function ResultCard({ detail }: { detail: ConsultationDetail }) {
   const c = detail.consultation;
   const r = c.resolved;
+  const setup = r ? setupInstructions(r) : null;
   const final = ['APPROVED', 'CORRECTED_APPROVED'].includes(c.status);
   return (
     <section className="panel">
       <div className="row between">
-        <h2>Konfigurasi yang disarankan</h2>
+        <h2>Recommended configuration</h2>
         <span className={'badge ' + (final ? 'success' : 'amber')}>
           {final ? 'Disetujui pakar' : 'Sementara · perlu penilaian'}
         </span>
@@ -72,9 +94,12 @@ export function ResultCard({ detail }: { detail: ConsultationDetail }) {
       )}
       {r ? (
         <>
+          <p className="recommendation-summary">
+            <b>{configurationText(r)}</b>
+          </p>
           <div className="config-grid">
             <div>
-              <small>Layanan</small>
+              <small>Service</small>
               <strong>{valueLabel(r.model.service)}</strong>
             </div>
             <div>
@@ -86,7 +111,11 @@ export function ResultCard({ detail }: { detail: ConsultationDetail }) {
               <strong>{r.profile.effort === 'default' ? 'Bawaan' : r.profile.effort}</strong>
             </div>
             <div>
-              <small>Mode kerja</small>
+              <small>Thinking</small>
+              <strong>{thinkingLabel(r.profile.thinking)}</strong>
+            </div>
+            <div>
+              <small>Work mode</small>
               <strong>
                 {
                   {
@@ -97,6 +126,25 @@ export function ResultCard({ detail }: { detail: ConsultationDetail }) {
                 }
               </strong>
             </div>
+          </div>
+          <div className="next-step">
+            <small>CARA MENERAPKAN</small>
+            <p>{setup?.text}</p>
+            {setup?.code && (
+              <pre>
+                <code>{setup.code}</code>
+              </pre>
+            )}
+            {!r.model.demo && (
+              <p className="muted">
+                Sumber:{' '}
+                <a href={r.model.source} target="_blank" rel="noreferrer">
+                  Dokumentasi resmi
+                </a>{' '}
+                · diverifikasi {r.model.verifiedAt}. Pilih hanya model dan effort yang tersedia pada
+                akun Anda.
+              </p>
+            )}
           </div>
           <p>
             <b>Skill:</b> {r.skills.map((s) => s.name).join(', ') || 'Tidak diperlukan'}
@@ -155,7 +203,7 @@ export function ResultCard({ detail }: { detail: ConsultationDetail }) {
           <summary>Riwayat penilaian pakar</summary>
           {detail.reviews.map((review) => (
             <p key={review.id}>
-              <b>{review.action.replaceAll('_', ' ')}</b> · {review.reason}
+              <b>{reviewLabels[review.action] ?? review.action}</b> · {review.reason}
             </p>
           ))}
         </details>
@@ -206,7 +254,7 @@ export function PredicateEditor({
     meta.kind === 'number'
       ? ['equals', 'not_equals', 'gt', 'gte', 'lt', 'lte', 'is_unknown']
       : meta.kind === 'set'
-        ? ['contains', 'is_unknown']
+        ? ['contains', 'not_contains', 'is_unknown']
         : ['equals', 'not_equals', 'in', 'is_unknown'];
   return (
     <div className="predicate">

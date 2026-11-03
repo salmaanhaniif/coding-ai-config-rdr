@@ -1,5 +1,6 @@
 import {
   catalogSchema,
+  services,
   type AccessProfile,
   type Catalog,
   type Conclusion,
@@ -90,6 +91,18 @@ export function validateCatalog(input: unknown): Catalog {
     const model = c.models.find((m) => m.id === p.modelId);
     demand(model, 'CATALOG_INVALID', 'Model profil tidak ditemukan.');
     demand(model.efforts.includes(p.effort), 'CATALOG_INVALID', 'Effort profil tidak didukung.');
+    if (!model.demo) {
+      demand(
+        p.effort !== 'default',
+        'CATALOG_INVALID',
+        'Profil model nyata memerlukan effort eksplisit.',
+      );
+      demand(
+        p.thinking && model.thinkingModes?.includes(p.thinking),
+        'CATALOG_INVALID',
+        'Mode thinking profil tidak didukung model.',
+      );
+    }
     for (const id of p.skillIds) {
       const skill = c.skills.find((s) => s.id === id);
       demand(
@@ -99,7 +112,7 @@ export function validateCatalog(input: unknown): Catalog {
       );
     }
   }
-  for (const service of ['codex', 'claude-code'] as const)
+  for (const service of services)
     if (c.defaults[service]) {
       const profile = c.profiles.find((p) => p.id === c.defaults[service]);
       const model = c.models.find((m) => m.id === profile?.modelId);
@@ -132,9 +145,13 @@ export function configurationIssues(r: Resolved, access: AccessProfile, c: Catal
     issues.push('Model hasil RDR tidak termasuk akses yang dikonfirmasi.');
   if (!model?.active || model.service !== r.model.service)
     issues.push('Model tidak aktif atau layanan berubah; perlu tinjauan pakar.');
+  if (model?.runtimeId !== r.model.runtimeId)
+    issues.push('ID model di layanan berubah; perlu tinjauan pakar.');
   if (!profile?.active) issues.push('Profil konfigurasi tidak aktif.');
   if (!model?.efforts.includes(r.profile.effort))
     issues.push('Effort tidak didukung model saat ini.');
+  if (!r.model.demo && (!r.profile.thinking || !model?.thinkingModes?.includes(r.profile.thinking)))
+    issues.push('Mode thinking tidak didukung model saat ini.');
   for (const s of r.skills) {
     const current = c.skills.find((x) => x.id === s.id);
     if (!current?.active || !current.services.includes(r.model.service))

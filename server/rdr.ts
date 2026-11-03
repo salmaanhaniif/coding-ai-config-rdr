@@ -24,6 +24,8 @@ export function evaluate(condition: Condition, facts: Facts): boolean {
         return Array.isArray(p.value) && typeof actual === 'string' && p.value.includes(actual);
       case 'contains':
         return Array.isArray(actual) && typeof p.value === 'string' && actual.includes(p.value);
+      case 'not_contains':
+        return Array.isArray(actual) && typeof p.value === 'string' && !actual.includes(p.value);
       case 'gt':
         return typeof actual === 'number' && typeof p.value === 'number' && actual > p.value;
       case 'gte':

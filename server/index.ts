@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
-import { Store } from './store.js';
+import { openRuntimeStore } from './runtime-store.js';
 import { createApp } from './app.js';
-const store = new Store(resolve(process.env.DB_PATH ?? 'data/devpilot.sqlite'));
+const store = openRuntimeStore();
 const app = await createApp(store, { logger: true });
 const close = async () => {
   await app.close();

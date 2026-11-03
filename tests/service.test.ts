@@ -242,7 +242,7 @@ describe('Persistensi', () => {
     const dir = mkdtempSync(join(tmpdir(), 'devpilot-test-'));
     const file = join(dir, 'test.sqlite');
     try {
-      let store = new Store(file);
+      let store = new Store(file, { catalog: demoCatalog() });
       let advisor = new Advisor(store);
       const access = advisor.createAccess({
         name: 'Persistent',
@@ -257,7 +257,7 @@ describe('Persistensi', () => {
       const c = advisor.createConsultation(task(access, { failures: 3 }));
       const final = advisor.correct(c.consultation.id, correction(c));
       store.close();
-      store = new Store(file);
+      store = new Store(file, { catalog: demoCatalog() });
       advisor = new Advisor(store);
       expect(store.rules()).toHaveLength(2);
       expect(advisor.detail(c.consultation.id)).toEqual(final);
@@ -267,3 +267,4 @@ describe('Persistensi', () => {
     }
   });
 });
+import { demoCatalog } from '../server/catalog.js';

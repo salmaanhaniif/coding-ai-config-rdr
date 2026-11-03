@@ -10,13 +10,16 @@ import type {
   RuleNode,
   Task,
 } from '../shared/domain.js';
-import { demoCatalog } from './catalog.js';
+import { realCatalog } from './real-catalog.js';
 import { AppError } from './errors.js';
 export const now = () => new Date().toISOString();
 export const uid = () => randomUUID();
 export class Store {
   db: DatabaseSync;
-  constructor(public filename: string) {
+  constructor(
+    public filename: string,
+    private options: { catalog?: Catalog } = {},
+  ) {
     if (filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
     this.db = new DatabaseSync(filename);
     this.db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;');
@@ -59,7 +62,7 @@ export class Store {
         this.db.prepare('INSERT INTO kb_versions VALUES(?,?)').run(1, JSON.stringify([root]));
       }
       if (!this.db.prepare("SELECT value FROM metadata WHERE key='catalog'").get()) {
-        const c = demoCatalog();
+        const c = this.options.catalog ?? realCatalog();
         this.db.prepare('INSERT INTO catalogs VALUES(?,?)').run(1, JSON.stringify(c));
         this.db.prepare('INSERT INTO metadata VALUES(?,?)').run('catalog', 1);
       }

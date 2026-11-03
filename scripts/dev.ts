@@ -1,8 +1,8 @@
 import { resolve } from 'node:path';
 import { createServer } from 'vite';
 import { createApp } from '../server/app.js';
-import { Store } from '../server/store.js';
-const store = new Store(resolve(process.env.DB_PATH ?? 'data/devpilot.sqlite'));
+import { openRuntimeStore } from '../server/runtime-store.js';
+const store = openRuntimeStore();
 const app = await createApp(store, { logger: true, staticRoot: resolve('.runtime/no-static-dev') });
 const vite = await createServer();
 let closing = false;

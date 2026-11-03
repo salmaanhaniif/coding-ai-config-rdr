@@ -1,14 +1,11 @@
 :root {
-  font-family:
-    Inter,
-    Segoe UI,
-    Arial,
-    sans-serif;
+  font-family: 'Segoe UI', system-ui, Arial, sans-serif;
   color: #253b37;
   background: #f5f7f4;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  font-size: 15px;
+  font-size: 14px;
+  line-height: 1.55;
 }
 * {
   box-sizing: border-box;
@@ -82,9 +79,9 @@ button:disabled {
   gap: 12px;
   color: white;
   text-decoration: none;
-  font-size: 25px;
-  font-weight: 650;
-  letter-spacing: -1px;
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
 }
 .brand-icon {
   background: #d7ecba;
@@ -104,16 +101,16 @@ button:disabled {
 }
 .brand small {
   display: block;
-  font-size: 9px;
-  letter-spacing: 2px;
+  font-size: 10px;
+  letter-spacing: 0.8px;
   font-weight: 500;
   margin-top: 5px;
 }
 .workspace-label {
-  font-size: 10px;
-  letter-spacing: 2px;
-  color: #94b5a8;
-  margin: 55px 12px 16px;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  color: #abc4b9;
+  margin: 40px 12px 12px;
 }
 nav {
   display: grid;
@@ -145,8 +142,8 @@ nav button:hover {
   padding: 30px 12px 0;
 }
 .sidebar-bottom p {
-  font-size: 18px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.65;
   color: #d9e6cd;
 }
 .sidebar-bottom small {
@@ -169,9 +166,9 @@ header {
   gap: 14px;
 }
 header > span {
-  font-size: 10px;
-  letter-spacing: 2px;
-  color: #648073;
+  font-size: 12px;
+  letter-spacing: 0;
+  color: #63756d;
 }
 .role-select {
   display: flex;
@@ -200,27 +197,27 @@ header > span {
   margin-bottom: 25px;
 }
 .eyebrow {
-  font-size: 10px;
-  letter-spacing: 1.7px;
+  font-size: 11px;
+  letter-spacing: 0.2px;
   color: #7a8c7f;
   font-weight: 600;
 }
 h1 {
-  font-weight: 550;
-  letter-spacing: -1.2px;
-  line-height: 1.2;
-  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  line-height: 1.35;
+  font-size: 28px;
   max-width: 640px;
   margin: 12px 0 0;
 }
 h2 {
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 600;
-  letter-spacing: -0.4px;
+  letter-spacing: -0.2px;
   margin: 0 0 18px;
 }
 h3 {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.5;
 }
@@ -256,10 +253,10 @@ p {
 .panel {
   background: white;
   border: 1px solid #e1e7df;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 28px;
-  margin-bottom: 22px;
-  box-shadow: 0 2px 4px #1a3e2603;
+  margin-bottom: 24px;
+  box-shadow: none;
 }
 .row {
   display: flex;
@@ -349,8 +346,8 @@ p {
   margin: 0;
 }
 .stats strong {
-  font-size: 23px;
-  font-weight: 400;
+  font-size: 19px;
+  font-weight: 500;
   color: #688461;
 }
 .stats span {
@@ -365,7 +362,7 @@ p {
 }
 .field > label,
 .field-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: #435e4e;
 }
@@ -507,8 +504,8 @@ details[open] > summary {
   background: #fafbf7;
 }
 .next-step small {
-  font-size: 9px;
-  letter-spacing: 1.5px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
 }
 .next-step p {
   margin: 7px 0;
@@ -554,7 +551,7 @@ details[open] > summary {
   padding: 12px 8px 20px;
   border: 1px solid #e4eae0;
   border-radius: 12px;
-  background: linear-gradient(145deg, #fbfcf9, #f5f8f1);
+  background: #f8faf6;
 }
 .tree-root,
 .tree-children ul {
@@ -637,6 +634,23 @@ details[open] > summary {
 }
 .tree-node strong {
   line-height: 1.5;
+}
+.tree-children[hidden] {
+  display: none;
+}
+.tree-toggle {
+  margin: 4px 0 10px;
+  font-size: 12px;
+}
+.recommendation-summary {
+  line-height: 1.7;
+}
+.next-step pre {
+  overflow-x: auto;
+  padding: 12px;
+  background: #f1f4f8;
+  border-radius: 8px;
+  font-size: 13px;
 }
 .tree-node span {
   font-size: 12px;
@@ -935,5 +949,109 @@ ol {
   }
   .tree-canvas {
     max-width: calc(100vw - 48px);
+  }
+}
+
+/* Presentation refinements: retain the original sidebar and page structure. */
+.sidebar nav button {
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 12px;
+}
+.page-heading .eyebrow {
+  font-weight: 500;
+}
+.page-heading h1 {
+  margin-top: 7px;
+}
+.panel p {
+  max-width: 78ch;
+}
+.panel .muted {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.field small {
+  font-size: 12px;
+  line-height: 1.6;
+}
+input:not([type='checkbox']),
+textarea,
+select {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.config-grid small {
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  text-transform: none;
+}
+.config-grid strong {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.demo-banner {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.case-row {
+  line-height: 1.5;
+  align-items: flex-start;
+}
+.case-row span {
+  overflow-wrap: anywhere;
+}
+.case-row small {
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: normal;
+  text-align: right;
+}
+.predicate select,
+.predicate input {
+  font-size: 13px;
+}
+.catalog-grid .subpanel {
+  padding: 22px;
+}
+.catalog-grid .field {
+  margin-bottom: 18px;
+}
+.tree-node strong {
+  font-size: 13px;
+  line-height: 1.55;
+}
+.tree-node span,
+.tree-detail p {
+  line-height: 1.65;
+}
+summary {
+  line-height: 1.55;
+}
+footer {
+  font-size: 11px;
+  line-height: 1.6;
+}
+@media (max-width: 720px) {
+  h1 {
+    font-size: 24px;
+  }
+  header > span {
+    font-size: 11px;
+    letter-spacing: 0;
+  }
+  .panel {
+    padding: 21px 18px;
+  }
+  .sidebar nav button {
+    font-size: 12px;
+    padding: 10px;
+  }
+  .page-heading {
+    gap: 12px;
+  }
+  .case-row small {
+    text-align: left;
   }
 }
